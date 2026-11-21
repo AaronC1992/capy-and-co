@@ -23,6 +23,7 @@ The fantasy RPG/VR project was cancelled before implementation. The current deli
 - 800 x 1000 PNG picture generation.
 - Visible corrupt-save, storage-quota, audio, render, and export error handling.
 - Git initialization, lockfile, strict TypeScript, unit tests, and static production build.
+- Public hosting on GitHub Pages, deployed automatically from `main` by a workflow that runs the tests first, with a Play now button at the top of the README.
 - No ads, accounts, purchases, analytics, remote fonts, or external artwork.
 
 ## Automated checks
@@ -96,6 +97,16 @@ Verification on an isolated production origin, without changing the normal game'
 - Exported SVG contained all 13 soaped locks. PNG generation produced a valid 800 x 1000 image (356,439 bytes). Native device download behavior still needs the real-device check below.
 - All seven tools remained at least 44 x 44 pixels, with no horizontal overflow at widths 320, 390, 768, 1024, and 1440. A gallery test selector was updated to account for the photo count in the button's accessible name; its rerun passed.
 - No runtime page errors occurred in the continuous brush/soap touch checks. Physical tablet feel is still unverified.
+
+### GitHub Pages deployment
+
+The game is live at https://aaronc1992.github.io/capy-and-co/ from the public repository https://github.com/AaronC1992/capy-and-co.
+
+- Pages uses the **GitHub Actions** source. `.github/workflows/deploy.yml` runs on every push to `main` (and manually): `npm ci`, `npm test`, `npm run build`, then publishes `dist`. A failing test blocks the deployment.
+- `vite.config.ts` sets `base: './'` so the same build works under the `/capy-and-co/` subpath.
+- The README starts with a **Play now!** button (`docs/play-now.svg`) that links to the live game.
+- Verification: the first workflow run passed (build 14 s, deploy 12 s). The live page, JS, CSS and favicon return HTTP 200. In Chromium the live game loads with no console errors or failed requests, brushing across the hair changed 90 of its 195 strand paths, and the README button renders on GitHub and links to the game.
+- Not verified: touch on a physical tablet, or on iOS Safari.
 
 ## Browser checks
 
@@ -234,6 +245,6 @@ Use a current Chrome/Edge desktop browser, Android Chrome, and iPad/iPhone Safar
 
 ## Known limitations and next milestone
 
-Not yet publicly hosted. The local server must stay running for LAN play. There is no native installer, service worker/offline launch, or cloud gallery. Browser storage is per origin and can be cleared by the device. Hair consists of stylized editable locks, not fluid strand simulation; accessories use predefined positions.
+Hosted publicly on GitHub Pages at https://aaronc1992.github.io/capy-and-co/ (see "GitHub Pages deployment" above). There is no native installer, service worker/offline launch, or cloud gallery. Browser storage is per origin and can be cleared by the device, so pictures saved on one device or browser do not appear on another. Hair consists of stylized editable locks, not fluid strand simulation; accessories use predefined positions.
 
-Next: a supervised real-tablet playtest, any resulting touch/feedback improvements, verified native-browser downloads, and an HTTPS static deployment. More content can follow after that feedback.
+Next: a supervised real-tablet playtest using the hosted link, any resulting touch/feedback improvements, and verified native-browser downloads. More content can follow after that feedback.

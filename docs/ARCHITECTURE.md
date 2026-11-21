@@ -83,4 +83,4 @@ Picture export clones a saved portrait, serializes a self-contained SVG, rasteri
 
 The layout uses a two-column studio/toolbox at desktop and tablet widths, and a stacked touch layout on phones. Controls have accessible names, pressed/selected states, focus styling, and coarse-pointer sizing. Native dialogs contain keyboard focus, restore it on close, and have explicit Escape handling. Reduced-motion preferences disable character blinking.
 
-`main.tsx` mounts the app under React StrictMode and a render error boundary. It does not register a service worker. Production consists entirely of static files.
+`main.tsx` mounts the app under React StrictMode and a render error boundary. It does not register a service worker. Production consists entirely of static files, built with relative asset URLs (`base: './'`) and published to GitHub Pages by `.github/workflows/deploy.yml`.
