@@ -1,15 +1,15 @@
 import type { Strand } from './model'
 import { HAIR_GROUP_COUNT, isSideStrand, STRAND_COUNT, STRANDS_PER_GROUP } from './hairLayout'
 
-interface Pt { x: number; y: number }
-type Curve = readonly [Pt, Pt, Pt, Pt]
+export interface Pt { x: number; y: number }
+export type Curve = readonly [Pt, Pt, Pt, Pt]
 
 // The top of the drawn head, shared with the artwork so hair roots and the scalp cover follow its exact curve.
 export const HEAD_TOP_PATH = 'M168 246c-1-60 40-74 81-74s84 13 84 73'
-const LEFT_CURVE: Curve = [{ x: 168, y: 246 }, { x: 167, y: 186 }, { x: 208, y: 172 }, { x: 249, y: 172 }]
-const RIGHT_CURVE: Curve = [{ x: 249, y: 172 }, { x: 290, y: 172 }, { x: 333, y: 185 }, { x: 333, y: 245 }]
+export const LEFT_CURVE: Curve = [{ x: 168, y: 246 }, { x: 167, y: 186 }, { x: 208, y: 172 }, { x: 249, y: 172 }]
+export const RIGHT_CURVE: Curve = [{ x: 249, y: 172 }, { x: 290, y: 172 }, { x: 333, y: 185 }, { x: 333, y: 245 }]
 
-function bezier([a, b, c, d]: Curve, t: number): Pt {
+export function bezier([a, b, c, d]: Curve, t: number): Pt {
   const u = 1 - t
   return {
     x: u * u * u * a.x + 3 * u * u * t * b.x + 3 * u * t * t * c.x + t * t * t * d.x,

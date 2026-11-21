@@ -393,3 +393,135 @@ describe('gel-combed hair', () => {
   })
 })
 
+describe('soaked hair', () => {
+  // A pose that hangs the strand out to the right, growing toward the tip like a weighed-down lock.
+  const hung = (reach: number, index = STRAND): StrandPose => ({
+    index,
+    offsets: Array.from({ length: HAIR_SHAPE_LENGTH }, (_, slot) => (slot % 2 === 0 ? (reach * ((slot >> 1) + 1)) / 24 : 0)),
+  })
+  const tip = (motion: HairMotion) => motion.offsets()[STRAND]?.[HAIR_SHAPE_LENGTH - 2] ?? 0
+
+  it('holds the strands it soaks and sags to the hanging pose without swinging past it', () => {
+    const motion = new HairMotion()
+    motion.soak([hung(60), hung(40, 7)])
+    expect(motion.heldStrands()).toEqual([STRAND, 7])
+    let furthest = 0
+    for (let frame = 0; frame < 240; frame++) {
+      motion.step(1 / 60)
+      furthest = Math.max(furthest, tip(motion))
+    }
+    expect(furthest).toBeLessThanOrEqual(60 + 1e-6)
+    expect(tip(motion)).toBeCloseTo(60, 1)
+  })
+  it('sags more slowly than hair that is laid down with gel', () => {
+    const soaked = new HairMotion()
+    const gelled = new HairMotion()
+    soaked.soak([hung(60)])
+    gelled.comb([hung(60)])
+    advance(soaked, 0.15)
+    advance(gelled, 0.15)
+    expect(tip(soaked)).toBeGreaterThan(5)
+    expect(tip(soaked)).toBeLessThan(tip(gelled) * 0.6)
+  })
+  it('lets go of soaked hair without a bounce, though other hair springs back', () => {
+    const lowestAfterRelease = (hold: 'soak' | 'blow') => {
+      const motion = new HairMotion()
+      motion[hold]([hung(60)])
+      advance(motion, 3)
+      motion.release()
+      let lowest = 0
+      for (let frame = 0; frame < 240; frame++) {
+        motion.step(1 / 60)
+        lowest = Math.min(lowest, tip(motion))
+      }
+      return lowest
+    }
+    expect(lowestAfterRelease('blow')).toBeLessThan(-5)
+    expect(lowestAfterRelease('soak')).toBeGreaterThan(-0.05)
+  })
+  it('keeps the hanging pose when committed, with no visual jump', () => {
+    const look = createLook('mochi')
+    const motion = new HairMotion()
+    motion.soak([hung(60)])
+    advance(motion, 0.2)
+    const before = strandPoints(look.hair[STRAND], STRAND, motion.offsets()[STRAND])
+    const shift = motion.commit(STRAND)
+    expect(shift).toHaveLength(HAIR_SHAPE_LENGTH)
+    look.hair[STRAND] = { ...look.hair[STRAND], shape: addShape(look.hair[STRAND].shape, shift!) }
+    strandPoints(look.hair[STRAND], STRAND, motion.offsets()[STRAND]).forEach((point, step) => {
+      expect(point.x).toBeCloseTo(before[step].x, 8)
+      expect(point.y).toBeCloseTo(before[step].y, 8)
+    })
+    motion.release()
+    advance(motion, 4)
+    expect(motion.offsets()).toEqual([])
+    expect(strandPoints(look.hair[STRAND], STRAND)[24].x).toBeCloseTo(restPoint(createLook('mochi'), STRAND, 24).x + 60, 1)
+  })
+  it('ignores poses that are malformed or for hair that does not exist', () => {
+    const motion = new HairMotion()
+    const good = hung(30)
+    motion.soak([
+      { ...good, offsets: good.offsets.slice(1) },
+      { ...good, offsets: good.offsets.map((value, slot) => (slot === 3 ? Number.NaN : value)) },
+      { ...good, index: -1 },
+      { ...good, index: 65 },
+    ])
+    expect(motion.heldStrands()).toEqual([])
+    expect(motion.offsets()).toEqual([])
+  })
+  it('snaps straight to the hanging pose under reduced motion', () => {
+    const motion = new HairMotion()
+    motion.soak([hung(60)])
+    expect(motion.step(1 / 60, true)).toBe(false)
+    expect(tip(motion)).toBe(60)
+  })
+})
+
+describe('published offsets', () => {
+  const swept = (reach: number, index: number): StrandPose => ({
+    index,
+    offsets: Array.from({ length: HAIR_SHAPE_LENGTH }, (_, slot) => (slot % 2 === 0 ? (reach * ((slot >> 1) + 1)) / 24 : 0)),
+  })
+
+  it('hands out the very same list while nothing has moved, so the drawing can skip the work', () => {
+    const motion = new HairMotion()
+    motion.comb([swept(50, STRAND), swept(30, 9)])
+    advance(motion, 3)
+    const settled = motion.offsets()
+    expect(motion.offsets()).toBe(settled)
+    expect(motion.offsets()).toBe(settled)
+  })
+  it('only replaces the strands that moved and keeps the arrays of the rest', () => {
+    const motion = new HairMotion()
+    motion.comb([swept(50, STRAND), swept(30, 9)])
+    advance(motion, 3)
+    const before = motion.offsets()
+    motion.comb([swept(50, STRAND), swept(45, 9)])
+    motion.step(1 / 60)
+    const after = motion.offsets()
+    expect(after).not.toBe(before)
+    expect(after[STRAND]).toBe(before[STRAND])
+    expect(after[9]).not.toBe(before[9])
+    expect(after[9]![46]).toBeGreaterThan(before[9]![46])
+  })
+  it('hands out a copy, so later motion never changes what was already drawn', () => {
+    const motion = new HairMotion()
+    motion.comb([swept(50, STRAND)])
+    motion.step(1 / 60)
+    const first = motion.offsets()
+    const frozen = first[STRAND]!.slice()
+    advance(motion, 0.3)
+    expect(first[STRAND]).toEqual(frozen)
+  })
+  it('hands out the shared empty list once every strand has settled', () => {
+    const motion = new HairMotion()
+    motion.comb([swept(50, STRAND)])
+    advance(motion, 0.2)
+    expect(motion.offsets()[STRAND]).toBeDefined()
+    motion.release()
+    advance(motion, 4)
+    expect(motion.offsets()).toBe(motion.offsets())
+    expect(motion.offsets()).toEqual([])
+  })
+})
+

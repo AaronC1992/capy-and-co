@@ -1,12 +1,18 @@
-import { useId } from 'react'
+import { memo, useId } from 'react'
 import type { Ref, SVGProps } from 'react'
 import { CHARACTERS } from '../game/model'
-import type { Accessory, Look } from '../game/model'
-import { strandPath, strandPoints } from '../game/hair'
+import type { Accessory, Look, Strand } from '../game/model'
+import { mixColor } from '../game/color'
+import { pathThrough, strandPoints } from '../game/hair'
 import type { HairOffsets } from '../game/hair'
-import { headTopY, HEAD_TOP_PATH, SCALP_CAP_PATH, SCALP_SHEEN_PATHS, scalpTints } from '../game/hairline'
+import { HAIR_POINTS } from '../game/hairLayout'
+import type { HairShape } from '../game/hairLayout'
+import { headTopY, SCALP_CAP_PATH, SCALP_SHEEN_PATHS, scalpTints } from '../game/hairline'
+import { HEAD_PATH } from '../game/headShape'
 import type { AirJet } from '../game/hairWind'
+import type { SprayJet } from '../game/hairSprayer'
 import { AirStream } from './AirStream'
+import { SprayStream } from './SprayStream'
 
 function Decoration({ accessory }: { accessory: Accessory }) {
   switch (accessory) {
@@ -26,30 +32,55 @@ interface CapybaraProps extends SVGProps<SVGSVGElement> {
   portrait?: boolean
   hairOffsets?: HairOffsets
   airflow?: AirJet
+  spray?: SprayJet
 }
+
+interface StrandProps {
+  strand: Strand
+  index: number
+  offsets?: HairShape
+}
+
+const WET_TINT = '#35546a'
+
+// Every strand is its own memoized piece: a frame only redraws the strands whose style or motion changed.
+const SoapStrand = memo(function SoapStrand({ strand, index, offsets }: StrandProps) {
+  const points = strandPoints(strand, index, offsets)
+  const tip = points[HAIR_POINTS]
+  return <g data-soap-strand={index}>
+    <path d={pathThrough(points, Boolean(strand.curl))} fill="none" stroke="#f2fffb" strokeWidth="9" strokeLinecap="round" opacity=".8" />
+    {[4, 10, 16, 22].map((step, bubble) => {
+      const point = points[step]
+      const x = point.x + (bubble % 2 ? 3 : -3)
+      const radius = 3.5 + (index + bubble) % 4 * 0.6
+      return <g key={step}>
+        <circle cx={x} cy={point.y} r={radius} fill={bubble % 3 ? '#fafffc' : '#e4f5f6'} fillOpacity=".94" stroke="#b8d9da" strokeWidth=".65" />
+        <path d={`M${x - radius * 0.48} ${point.y - radius * 0.15}q0 ${-radius * 0.48} ${radius * 0.48} ${-radius * 0.48}`} fill="none" stroke="#fff" strokeWidth="1.2" strokeLinecap="round" />
+      </g>
+    })}
+    <circle cx={tip.x + (index % 2 ? 7 : -7)} cy={tip.y - 6} r="2.5" fill="#effcff" fillOpacity=".8" stroke="#b8d9da" strokeWidth=".65" />
+  </g>
+})
 
 function SoapFoam({ look, offsets }: { look: Look; offsets?: HairOffsets }) {
   return <g className="soap-foam" pointerEvents="none" aria-hidden="true">
-    {look.hair.map((strand, index) => {
-      if (!strand.soapy) return null
-      const points = strandPoints(strand, index, offsets?.[index])
-      const tip = points[24]
-      return <g key={index} data-soap-strand={index}>
-        <path d={strandPath(strand, index, offsets?.[index])} fill="none" stroke="#f2fffb" strokeWidth="9" strokeLinecap="round" opacity=".8" />
-        {[4, 10, 16, 22].map((step, bubble) => {
-          const point = points[step]
-          const x = point.x + (bubble % 2 ? 3 : -3)
-          const radius = 3.5 + (index + bubble) % 4 * 0.6
-          return <g key={step}>
-            <circle cx={x} cy={point.y} r={radius} fill={bubble % 3 ? '#fafffc' : '#e4f5f6'} fillOpacity=".94" stroke="#b8d9da" strokeWidth=".65" />
-            <path d={`M${x - radius * 0.48} ${point.y - radius * 0.15}q0 ${-radius * 0.48} ${radius * 0.48} ${-radius * 0.48}`} fill="none" stroke="#fff" strokeWidth="1.2" strokeLinecap="round" />
-          </g>
-        })}
-        <circle cx={tip.x + (index % 2 ? 7 : -7)} cy={tip.y - 6} r="2.5" fill="#effcff" fillOpacity=".8" stroke="#b8d9da" strokeWidth=".65" />
-      </g>
-    })}
+    {look.hair.map((strand, index) => strand.soapy ? <SoapStrand key={index} strand={strand} index={index} offsets={offsets?.[index]} /> : null)}
   </g>
 }
+
+const HairStrand = memo(function HairStrand({ strand, index, offsets }: StrandProps) {
+  const points = strandPoints(strand, index, offsets)
+  const path = pathThrough(points, Boolean(strand.curl))
+  const wetness = strand.wetness ?? 0
+  const tip = wetness > 0 && index % 4 === 0 ? points[HAIR_POINTS] : null
+  // Wet hair paints no extra strokes: the cool tint is mixed into the color and the gloss strengthens the highlight.
+  return <g data-strand={index} data-wetness={wetness}>
+    <path d={path} stroke="#6a4b3a" strokeOpacity=".48" strokeWidth="6.4" />
+    <path d={path} stroke={wetness > 0 ? mixColor(strand.color, WET_TINT, wetness * 0.4) : strand.color} strokeWidth="5.2" />
+    <path d={path} stroke={wetness > 0 ? '#e9f8ff' : '#fff8e9'} strokeOpacity={Math.round((0.35 + wetness * 0.4) * 100) / 100} strokeWidth={Math.round((1 + wetness * 0.6) * 10) / 10} transform="translate(-1 -.3)" />
+    {tip && <g transform={`translate(${tip.x} ${tip.y})`}><path data-water-drop={index} className="water-drip" style={{ animationDelay: `${-(index % 7) * 0.31}s` }} d="M0 2q-7 9 0 10q7-1 0-10Z" fill="#afdce9" fillOpacity={wetness} stroke="#79b6ce" strokeWidth=".8" strokeOpacity={wetness} /></g>}
+  </g>
+})
 
 function ScalpCap({ look, id }: { look: Look; id: string }) {
   const tints = scalpTints(look.hair)
@@ -64,7 +95,7 @@ function ScalpCap({ look, id }: { look: Look; id: string }) {
   return <g className="scalp-cap" data-testid="scalp-cap" pointerEvents="none" aria-hidden="true">
     <defs>
       {gradient('scalp', (tint) => ({ color: tint.color, opacity: 1 }))}
-      {wet && gradient('scalp-wet', (tint) => ({ color: '#35546a', opacity: tint.wetness * 0.28 }))}
+      {wet && gradient('scalp-wet', (tint) => ({ color: WET_TINT, opacity: tint.wetness * 0.28 }))}
       {soapy.length > 0 && gradient('scalp-soap', (tint) => ({ color: '#f2fffb', opacity: tint.soap * 0.8 }))}
     </defs>
     <path d={SCALP_CAP_PATH} fill={`url(#${id}-scalp)`} stroke="#6a4b3a" strokeOpacity=".4" strokeWidth="2.2" strokeLinejoin="round" />
@@ -85,7 +116,7 @@ function ScalpCap({ look, id }: { look: Look; id: string }) {
   </g>
 }
 
-export function Capybara({ look, svgRef, happy = false, portrait = false, hairOffsets, airflow, ...props }: CapybaraProps) {
+export const Capybara = memo(function Capybara({ look, svgRef, happy = false, portrait = false, hairOffsets, airflow, spray, ...props }: CapybaraProps) {
   const id = useId().replace(/:/g, '')
   const friend = CHARACTERS.find((c) => c.id === look.character)!
   return <svg xmlns="http://www.w3.org/2000/svg" viewBox={portrait ? '80 55 340 355' : '0 0 500 520'} ref={svgRef} {...props}>
@@ -106,7 +137,7 @@ export function Capybara({ look, svgRef, happy = false, portrait = false, hairOf
     <g fill="none" stroke="#f9ddd1" strokeWidth="2.5" strokeLinecap="round"><path d="M234 402c-14-10-20 6 16 26 36-20 30-36 16-26l-16 12Z" /><path d="m213 395 4 4m68-4-4 4m-31-14v5" /></g>
     <path d="M184 227c-45-49-55 25-21 32m150-32c45-49 55 25 21 32" fill={friend.fur} stroke="#89664e" strokeWidth="3.5" />
     <path d="M170 239q-16-21-14 2m171-2q16-21 14 2" fill="none" stroke="#b47b69" strokeWidth="9" strokeLinecap="round" />
-    <path d={`${HEAD_TOP_PATH}l12 53c8 49-25 69-95 70-69-1-103-21-95-70Z`} fill={`url(#${id}-fur)`} stroke="#89664e" strokeWidth="3.5" />
+    <path d={HEAD_PATH} fill={`url(#${id}-fur)`} stroke="#89664e" strokeWidth="3.5" />
     <path d="M181 233c-4-23 9-40 27-47" fill="none" stroke="#f6d5a6" strokeWidth="5" strokeLinecap="round" opacity=".5" />
     <ellipse cx="183" cy="293" rx="24" ry="18" fill={`url(#${id}-cheek)`} />
     <ellipse cx="317" cy="293" rx="24" ry="18" fill={`url(#${id}-cheek)`} />
@@ -122,22 +153,12 @@ export function Capybara({ look, svgRef, happy = false, portrait = false, hairOf
     <ScalpCap look={look} id={id} />
     {/* Mitred joins paint far faster than round ones and look the same on hair this smooth. */}
     <g className="hair" fill="none" strokeLinecap="round" strokeLinejoin="miter">
-      {look.hair.map((strand, index) => {
-        const path = strandPath(strand, index, hairOffsets?.[index])
-        const wetness = strand.wetness ?? 0
-        const tip = wetness > 0 && index % 5 === 0 ? strandPoints(strand, index, hairOffsets?.[index])[24] : null
-        return <g key={index} data-strand={index} data-wetness={wetness}>
-          <path d={path} stroke="#6a4b3a" strokeOpacity=".48" strokeWidth="6.4" />
-          <path d={path} stroke={strand.color} strokeWidth="5.2" />
-          {wetness > 0 && <path d={path} stroke="#35546a" strokeOpacity={wetness * 0.28} strokeWidth="5.2" />}
-          <path d={path} stroke="#fff8e9" strokeOpacity=".35" strokeWidth="1" transform="translate(-1 -.3)" />
-          {tip && <path data-water-drop={index} d={`M${tip.x} ${tip.y + 2}q-7 9 0 10q7-1 0-10Z`} fill="#afdce9" fillOpacity={wetness} stroke="#79b6ce" strokeWidth=".8" strokeOpacity={wetness} />}
-        </g>
-      })}
+      {look.hair.map((strand, index) => <HairStrand key={index} strand={strand} index={index} offsets={hairOffsets?.[index]} />)}
     </g>
     <SoapFoam look={look} offsets={hairOffsets} />
     <Decoration accessory={look.accessory} />
     {airflow && <AirStream jet={airflow} id={id} />}
+    {spray && <SprayStream jet={spray} id={id} />}
     {happy && <g fill="#e4b361"><path d="m123 245 4 10 11 3-11 4-4 10-3-10-11-4 11-3Zm247-90 3 8 9 3-9 3-3 8-3-8-8-3 8-3Z" /></g>}
   </svg>
-}
+})

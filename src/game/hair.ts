@@ -44,13 +44,16 @@ function distanceToChord(point: Point, from: Point, to: Point): number {
 
 // Painting is what slows the studio down when plenty of hair moves at once. Straight hair looks just as smooth
 // drawn through every other point, so only the odd points that sit on a visible bend are kept. Curls need all.
-export function strandPath(strand: Strand, index: number, extra?: HairShape): string {
-  const points = strandPoints(strand, index, extra)
+export function pathThrough(points: readonly Point[], curly: boolean): string {
   return points
-    .filter((point, step) => strand.curl || step % 2 === 0 || step === HAIR_POINTS
+    .filter((point, step) => curly || step % 2 === 0 || step === HAIR_POINTS
       || distanceToChord(point, points[step - 1], points[step + 1]) > PATH_TOLERANCE)
     .map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x.toFixed(1)},${p.y.toFixed(1)}`)
     .join(' ')
+}
+
+export function strandPath(strand: Strand, index: number, extra?: HairShape): string {
+  return pathThrough(strandPoints(strand, index, extra), Boolean(strand.curl))
 }
 
 export function hitHair(look: Look, point: Point, offsets?: HairOffsets): number[] {

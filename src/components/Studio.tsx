@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { Dispatch, PointerEvent } from 'react'
 import type { HairAirEdit, HairLengthEdit, Look, SalonAction, Tool } from '../game/model'
 import { applyHairAir, applyHairLengths, CHARACTERS, STRAND_COUNT } from '../game/model'
-import { hitHairStroke } from '../game/hair'
+import { hitHairStroke, strandPoints } from '../game/hair'
 import type { Point } from '../game/hair'
 import { Capybara } from './Capybara'
 import { SalonRoom } from './SalonRoom'
@@ -11,8 +11,13 @@ import { useHairMotion } from './useHairMotion'
 import { cutHairStroke, HairGrowth } from '../game/hairEditing'
 import { HairBlower } from '../game/hairBlower'
 import { HairComb } from '../game/hairComb'
+import { HairSprayer } from '../game/hairSprayer'
+import type { SprayJet } from '../game/hairSprayer'
+import { soakedOffsets } from '../game/hairDroop'
+import { warmHeadShape } from '../game/headShape'
 import type { AirJet } from '../game/hairWind'
 import { addShape } from '../game/hairLayout'
+import type { StrandPose } from '../game/hairLayout'
 
 interface Props {
   look: Look
@@ -30,7 +35,7 @@ export const TOOL_HINTS: Record<Tool, string> = {
   grow: 'Hold to grow! Slide to another patch of hair.',
   curl: 'Swipe the hair for bouncy, happy curls.',
   soap: 'Rub on fluffy soap! Bubbles stay until you wash.',
-  wash: 'Rinse off the soap and reveal the original color.',
+  wash: 'Hold and swipe to spray! Wet hair rinses clean and hangs straight down.',
   blower: 'Hold and swipe! The air blows the hair around and makes it flap.',
   color: 'Paint the hair with your favorite color.',
 }
@@ -44,6 +49,7 @@ interface HairGesture {
   growth: HairGrowth | null
   blower: HairBlower | null
   comb: HairComb | null
+  sprayer: HairSprayer | null
 }
 
 export function Studio({ look, tool, color, dispatch, onStyle, canUndo }: Props) {
@@ -53,6 +59,7 @@ export function Studio({ look, tool, color, dispatch, onStyle, canUndo }: Props)
   const [happy, setHappy] = useState(false)
   const [dragging, setDragging] = useState(false)
   const [airflow, setAirflow] = useState<AirJet | null>(null)
+  const [spray, setSpray] = useState<SprayJet | null>(null)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const friend = CHARACTERS.find((c) => c.id === look.character)!
   useEffect(() => () => { if (timer.current) clearTimeout(timer.current) }, [])
@@ -60,12 +67,16 @@ export function Studio({ look, tool, color, dispatch, onStyle, canUndo }: Props)
     const current = gesture.current
     current?.growth?.stop()
     current?.blower?.stop()
+    current?.sprayer?.stop()
     gesture.current = null
     if (current && svgRef.current?.hasPointerCapture(current.id)) svgRef.current.releasePointerCapture(current.id)
     reset()
     setDragging(false)
     setAirflow(null)
+    setSpray(null)
   }, [look.character, tool, reset])
+  // The sprayer measures hair against the head's outline; build it before the first spray so that touch isn't slow.
+  useEffect(() => { if (tool === 'wash') warmHeadShape() }, [tool])
 
   function reactToStyling() {
     setHappy(true)
@@ -140,6 +151,25 @@ export function Studio({ look, tool, color, dispatch, onStyle, canUndo }: Props)
     animate()
   }
 
+  // Weighs the hair the spray has soaked down toward the way it hangs. Water takes a moment to pull hair down, so the
+  // springs carry it there; nothing is saved until the finger lifts.
+  function soakHair(current: HairGesture, sprayer: HairSprayer) {
+    const poses = sprayer.poses()
+    if (!poses.length) return
+    motion.current.soak(poses)
+    markTouched(current, poses.map(({ index }) => index))
+  }
+
+  // Makes the pose the air or the water left the hair in its resting shape, so it stays that way.
+  function keepPose(current: HairGesture, poses: readonly StrandPose[], hold: 'blow' | 'soak') {
+    motion.current[hold](poses)
+    const edits = motion.current.heldStrands().flatMap((index) => {
+      const shift = motion.current.commit(index)
+      return shift ? [{ index, shape: addShape(current.look.hair[index].shape, shift) ?? null }] : []
+    })
+    if (edits.length) dispatch({ type: 'air', edits, checkpoint: !current.started })
+  }
+
   function editOnFrame(now: number): boolean {
     const current = gesture.current
     if (!current || current.look.character !== look.character || document.hidden) return false
@@ -151,6 +181,11 @@ export function Studio({ look, tool, color, dispatch, onStyle, canUndo }: Props)
       changeAir(current, current.blower.hold(current.look, now))
       blowHair(current, current.blower)
       return current.blower.isBlowing()
+    }
+    if (current.sprayer && tool === 'wash') {
+      changeAir(current, current.sprayer.hold(now))
+      soakHair(current, current.sprayer)
+      return current.sprayer.isSpraying()
     }
     return false
   }
@@ -179,6 +214,14 @@ export function Studio({ look, tool, color, dispatch, onStyle, canUndo }: Props)
     }
     if (current.comb) {
       combHair(current, current.comb, point)
+      return
+    }
+    if (current.sprayer) {
+      changeAir(current, current.sprayer.move(point, performance.now()))
+      soakHair(current, current.sprayer)
+      current.last = point
+      setSpray(current.sprayer.jet())
+      animate()
       return
     }
     // The brush only touches the hair directly under the fingertip; other tools affect a wider patch.
@@ -214,6 +257,7 @@ export function Studio({ look, tool, color, dispatch, onStyle, canUndo }: Props)
       growth: tool === 'grow' ? new HairGrowth(look, point, performance.now()) : null,
       blower: tool === 'blower' ? new HairBlower(look, point, performance.now(), matchMedia('(prefers-reduced-motion: reduce)').matches) : null,
       comb: tool === 'comb' ? new HairComb(point) : null,
+      sprayer: tool === 'wash' ? new HairSprayer(look, point, performance.now()) : null,
     }
     stroke(point)
   }
@@ -222,8 +266,10 @@ export function Studio({ look, tool, color, dispatch, onStyle, canUndo }: Props)
     const current = gesture.current
     if (!current) return
     const swept = current.blower?.settled() ?? []
+    const soaked = current.sprayer?.poses(true) ?? []
     current.growth?.stop()
     current.blower?.stop()
+    current.sprayer?.stop()
     gesture.current = null
     if (current.comb) motion.current.comb(current.comb.poses())
     if (current.comb || (tool === 'brush' && current.started)) {
@@ -235,20 +281,15 @@ export function Studio({ look, tool, color, dispatch, onStyle, canUndo }: Props)
       })
       if (locks.length) dispatch({ type: 'pose', locks, checkpoint: !current.started })
     }
-    if (swept.length) {
-      // Blown hair stays swept the way the air left it, minus the flapping.
-      motion.current.blow(swept)
-      const edits = motion.current.heldStrands().flatMap((index) => {
-        const shift = motion.current.commit(index)
-        return shift ? [{ index, shape: addShape(current.look.hair[index].shape, shift) ?? null }] : []
-      })
-      if (edits.length) dispatch({ type: 'air', edits, checkpoint: !current.started })
-    }
+    // Blown hair stays swept the way the air left it, minus the flapping; soaked hair stays hanging.
+    if (swept.length) keepPose(current, swept, 'blow')
+    if (soaked.length) keepPose(current, soaked, 'soak')
     motion.current.release()
     publish()
     animate()
     setDragging(false)
     setAirflow(null)
+    setSpray(null)
     if (svgRef.current?.hasPointerCapture(current.id)) svgRef.current.releasePointerCapture(current.id)
   }
 
@@ -269,6 +310,11 @@ export function Studio({ look, tool, color, dispatch, onStyle, canUndo }: Props)
     finish()
     reset()
     dispatch({ type: 'style', tool, strands: Array.from({ length: STRAND_COUNT }, (_, i) => i), color, direction: 0.6, checkpoint: true })
+    if (tool === 'wash') {
+      // A soaked head hangs down all over, the same as hair the spray has reached.
+      const edits = look.hair.map((strand, index) => ({ index, shape: addShape(strand.shape, soakedOffsets(strandPoints(strand.curl ? { ...strand, curl: false } : strand, index))) ?? null }))
+      dispatch({ type: 'air', edits, checkpoint: false })
+    }
     reactToStyling()
   }
 
@@ -296,6 +342,7 @@ export function Studio({ look, tool, color, dispatch, onStyle, canUndo }: Props)
       happy={happy || dragging}
       hairOffsets={offsets}
       airflow={airflow ?? undefined}
+      spray={spray ?? undefined}
       onPointerDown={start}
       onPointerMove={(event) => {
         if (gesture.current?.id !== event.pointerId) return

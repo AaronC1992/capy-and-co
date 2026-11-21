@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
 import App from '../App'
 import { Capybara } from './Capybara'
+import { mixColor } from '../game/color'
 import { createLook, STRAND_COUNT } from '../game/model'
 
 afterEach(() => vi.unstubAllGlobals())
@@ -44,13 +45,23 @@ describe('application initialization and artwork', () => {
   })
   it('shows damp hair and water drops, then removes them when dry without removing soap', () => {
     const look = createLook('mochi')
-    look.hair[5] = { ...look.hair[5], wetness: 1, soapy: true }
+    look.hair[4] = { ...look.hair[4], wetness: 1, soapy: true }
     const wet = renderToStaticMarkup(<Capybara look={look} />)
-    expect(wet).toContain('data-water-drop="5"')
-    look.hair[5].wetness = 0
+    expect(wet).toContain('data-water-drop="4"')
+    look.hair[4].wetness = 0
     const dry = renderToStaticMarkup(<Capybara look={look} />)
-    expect(dry).not.toContain('data-water-drop="5"')
-    expect(dry).toContain('data-soap-strand="5"')
+    expect(dry).not.toContain('data-water-drop="4"')
+    expect(dry).toContain('data-soap-strand="4"')
+  })
+  it('paints a damp strand with no more strokes than a dry one, only cooler and shinier', () => {
+    const look = createLook('mochi')
+    const strand = (html: string) => /<g data-strand="1"[^>]*>(.*?)<\/g>/.exec(html)![1]
+    const dry = strand(renderToStaticMarkup(<Capybara look={look} />))
+    look.hair[1] = { ...look.hair[1], wetness: 1 }
+    const wet = strand(renderToStaticMarkup(<Capybara look={look} />))
+    expect(wet.match(/<path/g)).toHaveLength(dry.match(/<path/g)!.length)
+    expect(wet).toContain(`stroke="${mixColor('#eb9c95', '#35546a', 0.4)}"`)
+    expect(dry).not.toContain('#35546a')
   })
   it('draws a scalp cover under the strands that takes on the hair color, soap and dampness', () => {
     const look = createLook('mochi')
@@ -75,6 +86,17 @@ describe('application initialization and artwork', () => {
     expect(right).toContain('translate(120 200) rotate(0)')
     expect(right).not.toContain('scale(1 -1)')
     const left = renderToStaticMarkup(<Capybara look={look} airflow={{ nozzle: { x: 380, y: 200 }, direction: { x: -1, y: 0 } }} />)
+    expect(left).toContain('translate(380 200) rotate(180)')
+    expect(left).toContain('scale(1 -1)')
+  })
+  it('draws the spray only while spraying, with the bottle turned to face the way it sprays', () => {
+    const look = createLook('mochi')
+    expect(renderToStaticMarkup(<Capybara look={look} />)).not.toContain('data-testid="spray"')
+    const right = renderToStaticMarkup(<Capybara look={look} spray={{ nozzle: { x: 120, y: 200 }, target: { x: 220, y: 200 } }} />)
+    expect(right).toContain('data-testid="spray"')
+    expect(right).toContain('translate(120 200) rotate(0)')
+    expect(right).not.toContain('scale(1 -1)')
+    const left = renderToStaticMarkup(<Capybara look={look} spray={{ nozzle: { x: 380, y: 200 }, target: { x: 280, y: 200 } }} />)
     expect(left).toContain('translate(380 200) rotate(180)')
     expect(left).toContain('scale(1 -1)')
   })

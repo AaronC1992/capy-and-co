@@ -14,6 +14,8 @@ const FREE_SPRING: SpringSetting = { stiffness: 160, tipSoftness: 0.7, rootDampi
 const WIND_SPRING: SpringSetting = { stiffness: 620, tipSoftness: 0.4, rootDamping: 0.9, tipDamping: 0.35 }
 // Gelled hair does what the comb tells it: it settles onto the combed line fast and never wobbles.
 const GEL_SPRING: SpringSetting = { stiffness: 2600, tipSoftness: 0.2, rootDamping: 1, tipDamping: 1 }
+// Wet hair is heavy: it sags slowly toward the ground and stops there without bouncing.
+const WATER_SPRING: SpringSetting = { stiffness: 130, tipSoftness: 0.45, rootDamping: 1, tipDamping: 1 }
 const SETTLE_DISTANCE = 0.05
 const SETTLE_SPEED = 0.1
 const NO_OFFSETS: HairOffsets = []
@@ -31,8 +33,8 @@ function strandVariation(index: number): number {
   return 0.85 + 0.3 * ((index * 37) % 11) / 10
 }
 
-// What is holding a strand: a fingertip pushing it, the wind blowing it or the comb laying it down.
-type Drive = 'finger' | 'wind' | 'gel'
+// What is holding a strand: a fingertip pushing it, the wind blowing it, the comb laying it down or water weighing it down.
+type Drive = 'finger' | 'wind' | 'gel' | 'water'
 
 // Motion of one strand as a displacement for each drawn point, on top of its saved style.
 interface MovingStrand {
@@ -43,12 +45,14 @@ interface MovingStrand {
   origin: number[]
   held: boolean
   drive: Drive
+  // Wet hair keeps its weight after it is let go, so it settles without bouncing.
+  heavy: boolean
   active: boolean
 }
 
 function emptyStrand(): MovingStrand {
   const zeros = () => new Array<number>(HAIR_SHAPE_LENGTH).fill(0)
-  return { position: zeros(), target: zeros(), velocity: zeros(), origin: zeros(), held: false, drive: 'finger', active: false }
+  return { position: zeros(), target: zeros(), velocity: zeros(), origin: zeros(), held: false, drive: 'finger', heavy: false, active: false }
 }
 
 export class HairMotion {
@@ -58,11 +62,28 @@ export class HairMotion {
     finger: springTable(FINGER_SPRING, strandVariation(index)),
     wind: springTable(WIND_SPRING, strandVariation(index)),
     gel: springTable(GEL_SPRING, strandVariation(index)),
+    water: springTable(WATER_SPRING, strandVariation(index)),
   }))
 
+  // The offsets handed out last time. A strand that has not moved keeps the very same array, and when no strand
+  // moved the very same list, so the drawing can skip everything that is unchanged.
+  private shown: HairOffsets = NO_OFFSETS
+
   offsets(): HairOffsets {
-    if (!this.strands.some(({ active }) => active)) return NO_OFFSETS
-    return this.strands.map(({ active, position }) => (active ? position.slice() : undefined))
+    if (!this.strands.some(({ active }) => active)) {
+      this.shown = NO_OFFSETS
+      return NO_OFFSETS
+    }
+    let unchanged = this.shown.length === this.strands.length
+    const next = this.strands.map(({ active, position }, index) => {
+      const before = this.shown[index]
+      const entry = !active ? undefined : before?.every((value, slot) => value === position[slot]) ? before : position.slice()
+      if (entry !== before) unchanged = false
+      return entry
+    })
+    if (unchanged) return this.shown
+    this.shown = next
+    return next
   }
 
   target(index: number): HairShape {
@@ -118,6 +139,11 @@ export class HairMotion {
     this.hold(poses, 'gel')
   }
 
+  // Weighs each strand the spray has soaked down to its hanging pose. Strands stay held until released.
+  soak(poses: readonly StrandPose[]) {
+    this.hold(poses, 'water')
+  }
+
   private hold(poses: readonly StrandPose[], drive: Drive) {
     for (const { index, offsets } of poses) {
       const strand = this.strands[index]
@@ -150,6 +176,7 @@ export class HairMotion {
     for (const strand of this.strands) {
       if (!strand.held) continue
       strand.held = false
+      strand.heavy = strand.drive === 'water'
       strand.drive = 'finger'
       strand.target.fill(0)
       strand.origin.fill(0)
@@ -166,7 +193,7 @@ export class HairMotion {
       const strand = this.strands[index]
       if (!strand.active) continue
       const tables = this.springs[index]
-      const spring = strand.held ? tables[strand.drive] : tables.free
+      const spring = strand.held ? tables[strand.drive] : strand.heavy ? tables.water : tables.free
       let settled = true
       for (let slot = 0; slot < HAIR_SHAPE_LENGTH; slot++) {
         if (reducedMotion) {

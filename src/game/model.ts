@@ -61,6 +61,8 @@ export interface HairAirEdit {
   wetness?: number
   // Blown pose to save so the hair stays swept; omit to leave it unchanged, null clears it.
   shape?: HairShape | null
+  // Washes soap and dye out of the strand and straightens its curl, back to the natural color.
+  rinse?: boolean
 }
 
 export type Looks = Record<CharacterId, Look>
@@ -145,16 +147,19 @@ export function applyHairAir(look: Look, edits: HairAirEdit[]): Look {
   const selected = new Map(edits.filter(({ index, wetness, shape }) => Number.isInteger(index) && index >= 0 && index < STRAND_COUNT
     && (wetness === undefined || Number.isFinite(wetness))
     && (shape === undefined || shape === null || isPlainShape(shape))).map((edit) => [edit.index, edit]))
+  const natural = CHARACTERS.find((friend) => friend.id === look.character)!.hair
   let changed = false
   const hair = look.hair.map((strand, index) => {
     const edit = selected.get(index)
     if (!edit) return strand
     const wetness = edit.wetness === undefined ? undefined : Math.max(0, Math.min(1, edit.wetness))
     const wetnessChanged = wetness !== undefined && wetness !== (strand.wetness ?? 0)
+    const rinsed = edit.rinse === true && (strand.soapy === true || strand.curl || strand.color !== natural)
     const shape = edit.shape === undefined ? strand.shape : normalizeShape(edit.shape)
-    if (!wetnessChanged && shape === strand.shape) return strand
+    if (!wetnessChanged && !rinsed && shape === strand.shape) return strand
     changed = true
-    return withShape(wetnessChanged ? { ...strand, wetness } : strand, shape)
+    const clean = rinsed ? { ...strand, color: natural, curl: false, soapy: false } : strand
+    return withShape(wetnessChanged ? { ...clean, wetness } : clean, shape)
   })
   return changed ? { ...look, hair } : look
 }

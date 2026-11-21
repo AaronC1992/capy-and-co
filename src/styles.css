@@ -67,6 +67,12 @@ h1 svg { width: 28px; height: 36px; margin-left: 10px; margin-bottom: 10px; colo
 .tool-comb .studio-capy, .tool-snip .studio-capy, .tool-grow .studio-capy, .tool-soap .studio-capy, .tool-wash .studio-capy, .tool-blower .studio-capy, .tool-color .studio-capy { cursor: crosshair; }
 .air-stream { stroke-dasharray: 9 12; animation: blow-air .26s linear infinite; }
 @keyframes blow-air { to { stroke-dashoffset: -42; } }
+.spray-drops { stroke-dasharray: .1 15; animation: spray-flow .32s linear infinite; }
+@keyframes spray-flow { to { stroke-dashoffset: -15; } }
+.spray-pop { animation: spray-pop .78s ease-out infinite; }
+@keyframes spray-pop { 0% { opacity: 0; transform: scale(.4); } 25% { opacity: .95; } 100% { opacity: 0; transform: translateY(7px) scale(1.4); } }
+.water-drip { animation: water-drip 2.1s ease-in infinite; }
+@keyframes water-drip { 0% { transform: translateY(-3px) scale(.5); opacity: 0; } 22% { transform: translateY(0) scale(1); opacity: 1; } 100% { transform: translateY(15px) scale(.9); opacity: 0; } }
 .studio-capy:focus-visible { outline-offset: -8px; border-radius: 60px; }
 .studio-tag { position: absolute; top: 19px; left: 20px; display: flex; align-items: center; gap: 7px; font-size: 10px; color: #7d7e6c; letter-spacing: .2px; background: #fffaf0c7; border: 1px solid #fffaf0; border-radius: 30px; padding: 8px 12px; pointer-events: none; z-index: 1; }
 .live-dot { width: 5px; height: 5px; border-radius: 50%; background: #95a77c; }

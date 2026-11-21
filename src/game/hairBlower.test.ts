@@ -221,19 +221,26 @@ describe('keeping the blown hair', () => {
     const look = wetLook()
     const blower = new HairBlower(look, restPoint(look, 14), 0)
     let next = look
+    let posed = 0
+    const problems = { badShape: 0, rootMoved: 0, stretched: 0 }
+    // Thousands of points are checked, so problems are counted and asserted once instead of one expectation per point.
     for (let i = 1; i <= 120; i++) {
       next = applyHairAir(next, blower.hold(next, i * FRAME))
       for (const { index, offsets } of blower.poses()) {
-        expect(offsets).toHaveLength(HAIR_SHAPE_LENGTH)
-        expect(offsets.every((value) => Number.isFinite(value) && Math.abs(value) <= HAIR_SHAPE_LIMIT)).toBe(true)
+        posed++
+        if (offsets.length !== HAIR_SHAPE_LENGTH || !offsets.every((value) => Number.isFinite(value) && Math.abs(value) <= HAIR_SHAPE_LIMIT)) problems.badShape++
         const rest = strandPoints(look.hair[index], index)
         const pose = strandPoints(look.hair[index], index, offsets)
-        expect(pose[0]).toEqual(rest[0])
+        if (pose[0].x !== rest[0].x || pose[0].y !== rest[0].y) problems.rootMoved++
         pose.slice(1).forEach((point, step) => {
-          expect(Math.hypot(point.x - pose[step].x, point.y - pose[step].y)).toBeCloseTo(Math.hypot(rest[step + 1].x - rest[step].x, rest[step + 1].y - rest[step].y), 6)
+          const hung = Math.hypot(point.x - pose[step].x, point.y - pose[step].y)
+          const resting = Math.hypot(rest[step + 1].x - rest[step].x, rest[step + 1].y - rest[step].y)
+          if (Math.abs(hung - resting) >= 5e-7) problems.stretched++
         })
       }
     }
+    expect(posed).toBeGreaterThan(100)
+    expect(problems).toEqual({ badShape: 0, rootMoved: 0, stretched: 0 })
   })
   it('saves the swept pose without any flapping, and only for the hair the air reached', () => {
     const { look, blower, held } = blowAcross(1)

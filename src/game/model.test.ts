@@ -50,6 +50,21 @@ describe('salon gameplay', () => {
     }
     expect(salonReducer(state, { type: 'air', edits: [{ index: 5, wetness: Number.NaN }, { index: -1, shape: blown }, { index: STRAND_COUNT, shape: blown }, { index: 1.5, shape: blown }], checkpoint: true })).toBe(state)
   })
+  it('rinses soap, dye and curls out of just the strands the sprayer names, keeping their length and pose', () => {
+    const natural = initial().looks.mochi.hair[5].color
+    const dirty = salonReducer(salonReducer(salonReducer(initial(), style('soap', [5, 6])), style('curl', [5, 6])), style('color', [5, 6]))
+    expect(dirty.looks.mochi.hair[5]).toMatchObject({ soapy: true, curl: true, color: '#abcdef' })
+    const blown = Array.from({ length: 48 }, (_, slot) => (slot % 2 === 0 ? 20 : -8))
+    const posed = salonReducer(dirty, { type: 'air', edits: [{ index: 5, shape: blown }], checkpoint: true })
+    const rinsed = salonReducer(posed, { type: 'air', edits: [{ index: 5, rinse: true, wetness: 0.3 }], checkpoint: true })
+    expect(rinsed.looks.mochi.hair[5]).toMatchObject({ soapy: false, curl: false, color: natural, wetness: 0.3, shape: blown, length: dirty.looks.mochi.hair[5].length })
+    expect(rinsed.looks.mochi.hair[6]).toBe(dirty.looks.mochi.hair[6])
+    expect(salonReducer(rinsed, { type: 'undo' }).looks).toEqual(posed.looks)
+    expect(salonReducer(rinsed, { type: 'air', edits: [{ index: 5, rinse: true }], checkpoint: true })).toBe(rinsed)
+    const clean = initial()
+    expect(salonReducer(clean, { type: 'air', edits: [{ index: 5, rinse: true }], checkpoint: true })).toBe(clean)
+    expect(salonReducer(dirty, { type: 'air', edits: [{ index: 5, rinse: false }], checkpoint: true })).toBe(dirty)
+  })
   it('trims only the touched locks without mutating the original', () => {
     const state = initial()
     const result = salonReducer(state, style('snip'))
