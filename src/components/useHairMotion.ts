@@ -3,7 +3,8 @@ import { HairMotion } from '../game/hairMotion'
 import type { HairOffsets } from '../game/hair'
 
 export function useHairMotion(onFrame?: (now: number) => boolean) {
-  const motion = useRef(new HairMotion())
+  // Built once: a HairMotion makes hundreds of spring tables, and this hook renders every animation frame.
+  const [motion] = useState(() => ({ current: new HairMotion() }))
   const [offsets, setOffsets] = useState<HairOffsets>([])
   const frame = useRef<number | null>(null)
   const reduced = useRef(false)

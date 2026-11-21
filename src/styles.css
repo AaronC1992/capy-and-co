@@ -65,8 +65,8 @@ h1 svg { width: 28px; height: 36px; margin-left: 10px; margin-bottom: 10px; colo
 .studio-capy { height: calc(100% - 24px); width: auto; max-width: 100%; position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%); touch-action: none; user-select: none; -webkit-user-select: none; cursor: grab; }
 .studio-capy:active { cursor: grabbing; }
 .tool-snip .studio-capy, .tool-grow .studio-capy, .tool-soap .studio-capy, .tool-wash .studio-capy, .tool-blower .studio-capy, .tool-color .studio-capy { cursor: crosshair; }
-.air-stream { stroke-dasharray: 7 9; animation: blow-air .45s linear infinite; }
-@keyframes blow-air { to { stroke-dashoffset: -32; } }
+.air-stream { stroke-dasharray: 9 12; animation: blow-air .26s linear infinite; }
+@keyframes blow-air { to { stroke-dashoffset: -42; } }
 .studio-capy:focus-visible { outline-offset: -8px; border-radius: 60px; }
 .studio-tag { position: absolute; top: 19px; left: 20px; display: flex; align-items: center; gap: 7px; font-size: 10px; color: #7d7e6c; letter-spacing: .2px; background: #fffaf0c7; border: 1px solid #fffaf0; border-radius: 30px; padding: 8px 12px; pointer-events: none; z-index: 1; }
 .live-dot { width: 5px; height: 5px; border-radius: 50%; background: #95a77c; }

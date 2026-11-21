@@ -10,6 +10,7 @@ import { Icon } from './Icon'
 import { useHairMotion } from './useHairMotion'
 import { cutHairStroke, HairGrowth } from '../game/hairEditing'
 import { HairBlower } from '../game/hairBlower'
+import type { AirJet } from '../game/hairWind'
 import { addShape } from '../game/hairLayout'
 
 interface Props {
@@ -28,7 +29,7 @@ export const TOOL_HINTS: Record<Tool, string> = {
   curl: 'Swipe the hair for bouncy, happy curls.',
   soap: 'Rub on fluffy soap! Bubbles stay until you wash.',
   wash: 'Rinse off the soap and reveal the original color.',
-  blower: 'Hold to blow-dry! Move around to shape the hair.',
+  blower: 'Hold and swipe! The air blows the hair around and makes it flap.',
   color: 'Paint the hair with your favorite color.',
 }
 
@@ -48,7 +49,7 @@ export function Studio({ look, tool, color, dispatch, onStyle, canUndo }: Props)
   const { motion, offsets, animate, reset, publish } = useHairMotion(editOnFrame)
   const [happy, setHappy] = useState(false)
   const [dragging, setDragging] = useState(false)
-  const [airPoint, setAirPoint] = useState<Point | null>(null)
+  const [airflow, setAirflow] = useState<AirJet | null>(null)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const friend = CHARACTERS.find((c) => c.id === look.character)!
   useEffect(() => () => { if (timer.current) clearTimeout(timer.current) }, [])
@@ -60,7 +61,7 @@ export function Studio({ look, tool, color, dispatch, onStyle, canUndo }: Props)
     if (current && svgRef.current?.hasPointerCapture(current.id)) svgRef.current.releasePointerCapture(current.id)
     reset()
     setDragging(false)
-    setAirPoint(null)
+    setAirflow(null)
   }, [look.character, tool, reset])
 
   function reactToStyling() {
@@ -80,12 +81,17 @@ export function Studio({ look, tool, color, dispatch, onStyle, canUndo }: Props)
     return point.matrixTransform(matrix.inverse())
   }
 
-  function markEdited(current: HairGesture, indices: number[]) {
+  // Touching hair makes the capybara happy; only a saved change (`started`) earns an undo step.
+  function markTouched(current: HairGesture, indices: number[]) {
     const fresh = indices.some((index) => !current.touched.has(index))
     indices.forEach((index) => current.touched.add(index))
-    current.started = true
     setDragging(true)
     if (fresh) reactToStyling()
+  }
+
+  function markEdited(current: HairGesture, indices: number[]) {
+    current.started = true
+    markTouched(current, indices)
   }
 
   function changeLengths(current: HairGesture, edits: HairLengthEdit[]): boolean {
@@ -105,6 +111,15 @@ export function Studio({ look, tool, color, dispatch, onStyle, canUndo }: Props)
     markEdited(current, edits.map(({ index }) => index))
   }
 
+  // Sends the pose the air is blowing the hair toward to the springs; flapping comes from that pose
+  // changing every frame. Nothing is saved until the finger lifts.
+  function blowHair(current: HairGesture, blower: HairBlower) {
+    const poses = blower.poses()
+    if (!poses.length) return
+    motion.current.blow(poses)
+    markTouched(current, poses.map(({ index }) => index))
+  }
+
   function editOnFrame(now: number): boolean {
     const current = gesture.current
     if (!current || current.look.character !== look.character || document.hidden) return false
@@ -114,6 +129,7 @@ export function Studio({ look, tool, color, dispatch, onStyle, canUndo }: Props)
     }
     if (current.blower && tool === 'blower') {
       changeAir(current, current.blower.hold(current.look, now))
+      blowHair(current, current.blower)
       return current.blower.isBlowing()
     }
     return false
@@ -135,8 +151,9 @@ export function Studio({ look, tool, color, dispatch, onStyle, canUndo }: Props)
     }
     if (current.blower) {
       changeAir(current, current.blower.move(current.look, point, performance.now()))
+      blowHair(current, current.blower)
       current.last = point
-      setAirPoint(point)
+      setAirflow(current.blower.jet())
       animate()
       return
     }
@@ -179,6 +196,7 @@ export function Studio({ look, tool, color, dispatch, onStyle, canUndo }: Props)
   function finish() {
     const current = gesture.current
     if (!current) return
+    const swept = current.blower?.settled() ?? []
     current.growth?.stop()
     current.blower?.stop()
     gesture.current = null
@@ -191,11 +209,20 @@ export function Studio({ look, tool, color, dispatch, onStyle, canUndo }: Props)
       })
       if (locks.length) dispatch({ type: 'comb', locks, checkpoint: false })
     }
+    if (swept.length) {
+      // Blown hair stays swept the way the air left it, minus the flapping.
+      motion.current.blow(swept)
+      const edits = motion.current.heldStrands().flatMap((index) => {
+        const shift = motion.current.commit(index)
+        return shift ? [{ index, shape: addShape(current.look.hair[index].shape, shift) ?? null }] : []
+      })
+      if (edits.length) dispatch({ type: 'air', edits, checkpoint: !current.started })
+    }
     motion.current.release()
     publish()
     animate()
     setDragging(false)
-    setAirPoint(null)
+    setAirflow(null)
     if (svgRef.current?.hasPointerCapture(current.id)) svgRef.current.releasePointerCapture(current.id)
   }
 
@@ -242,7 +269,7 @@ export function Studio({ look, tool, color, dispatch, onStyle, canUndo }: Props)
       aria-label={`${friend.name}'s hair. ${TOOL_HINTS[tool]} Press Enter to apply to all hair.`}
       happy={happy || dragging}
       hairOffsets={offsets}
-      airflowPoint={airPoint ?? undefined}
+      airflow={airflow ?? undefined}
       onPointerDown={start}
       onPointerMove={(event) => {
         if (gesture.current?.id !== event.pointerId) return

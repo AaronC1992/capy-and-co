@@ -4,12 +4,15 @@ import { bendStrand, brushContact, brushSlip } from './hairBrush'
 import { HAIR_POINTS, HAIR_SHAPE_LENGTH, roundShape, STRAND_COUNT } from './hairLayout'
 import type { HairShape } from './hairLayout'
 import type { Look } from './model'
+import type { WindPose } from './hairWind'
 
 // Hair is stiffest at the scalp and floppy toward the tip, so the tip trails the finger and swings
 // after it. Each strand is a little different, so a swipe fans out instead of moving as one plank.
 interface SpringSetting { stiffness: number; tipSoftness: number; rootDamping: number; tipDamping: number }
 const HELD_SPRING: SpringSetting = { stiffness: 240, tipSoftness: 0.7, rootDamping: 0.75, tipDamping: 0.5 }
 const FREE_SPRING: SpringSetting = { stiffness: 160, tipSoftness: 0.7, rootDamping: 0.6, tipDamping: 0.4 }
+// Hair in a strong wind snaps to the air quickly and whips at the tip, so it can flap.
+const WIND_SPRING: SpringSetting = { stiffness: 620, tipSoftness: 0.4, rootDamping: 0.9, tipDamping: 0.35 }
 const SETTLE_DISTANCE = 0.05
 const SETTLE_SPEED = 0.1
 const NO_OFFSETS: HairOffsets = []
@@ -34,12 +37,14 @@ interface MovingStrand {
   // Pose at the moment the finger first grabbed the strand; used to limit how far it is carried.
   origin: number[]
   held: boolean
+  // Held by the blower rather than a fingertip.
+  wind: boolean
   active: boolean
 }
 
 function emptyStrand(): MovingStrand {
   const zeros = () => new Array<number>(HAIR_SHAPE_LENGTH).fill(0)
-  return { position: zeros(), target: zeros(), velocity: zeros(), origin: zeros(), held: false, active: false }
+  return { position: zeros(), target: zeros(), velocity: zeros(), origin: zeros(), held: false, wind: false, active: false }
 }
 
 export class HairMotion {
@@ -47,6 +52,7 @@ export class HairMotion {
   private springs = Array.from({ length: STRAND_COUNT }, (_, index) => ({
     held: springTable(HELD_SPRING, strandVariation(index)),
     free: springTable(FREE_SPRING, strandVariation(index)),
+    wind: springTable(WIND_SPRING, strandVariation(index)),
   }))
 
   offsets(): HairOffsets {
@@ -95,6 +101,22 @@ export class HairMotion {
     return touched
   }
 
+  // Points each strand the wind reaches at the pose the air is blowing it toward. The spring carries the
+  // hair there, so a target that keeps changing makes it flap. Strands stay held until released.
+  blow(poses: readonly WindPose[]) {
+    for (const { index, offsets } of poses) {
+      const strand = this.strands[index]
+      if (!strand || offsets.length !== HAIR_SHAPE_LENGTH || !offsets.every(Number.isFinite)) continue
+      if (!strand.held) {
+        strand.held = true
+        strand.active = true
+        strand.origin = strand.position.slice()
+      }
+      strand.wind = true
+      strand.target = offsets.slice()
+    }
+  }
+
   // Makes the current brushed pose the strand's resting pose. Returns the shape change to save, if any.
   commit(index: number): HairShape | undefined {
     const strand = this.strands[index]
@@ -113,6 +135,7 @@ export class HairMotion {
     for (const strand of this.strands) {
       if (!strand.held) continue
       strand.held = false
+      strand.wind = false
       strand.target.fill(0)
       strand.origin.fill(0)
     }
@@ -127,7 +150,8 @@ export class HairMotion {
     for (let index = 0; index < this.strands.length; index++) {
       const strand = this.strands[index]
       if (!strand.active) continue
-      const spring = strand.held ? this.springs[index].held : this.springs[index].free
+      const tables = this.springs[index]
+      const spring = strand.wind ? tables.wind : strand.held ? tables.held : tables.free
       let settled = true
       for (let slot = 0; slot < HAIR_SHAPE_LENGTH; slot++) {
         if (reducedMotion) {

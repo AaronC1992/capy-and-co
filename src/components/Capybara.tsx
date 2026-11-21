@@ -3,9 +3,10 @@ import type { Ref, SVGProps } from 'react'
 import { CHARACTERS } from '../game/model'
 import type { Accessory, Look } from '../game/model'
 import { strandPath, strandPoints } from '../game/hair'
-import type { HairOffsets, Point } from '../game/hair'
+import type { HairOffsets } from '../game/hair'
 import { headTopY, HEAD_TOP_PATH, SCALP_CAP_PATH, SCALP_SHEEN_PATHS, scalpTints } from '../game/hairline'
-import { Icon } from './Icon'
+import type { AirJet } from '../game/hairWind'
+import { AirStream } from './AirStream'
 
 function Decoration({ accessory }: { accessory: Accessory }) {
   switch (accessory) {
@@ -24,7 +25,7 @@ interface CapybaraProps extends SVGProps<SVGSVGElement> {
   happy?: boolean
   portrait?: boolean
   hairOffsets?: HairOffsets
-  airflowPoint?: Point
+  airflow?: AirJet
 }
 
 function SoapFoam({ look, offsets }: { look: Look; offsets?: HairOffsets }) {
@@ -84,7 +85,7 @@ function ScalpCap({ look, id }: { look: Look; id: string }) {
   </g>
 }
 
-export function Capybara({ look, svgRef, happy = false, portrait = false, hairOffsets, airflowPoint, ...props }: CapybaraProps) {
+export function Capybara({ look, svgRef, happy = false, portrait = false, hairOffsets, airflow, ...props }: CapybaraProps) {
   const id = useId().replace(/:/g, '')
   const friend = CHARACTERS.find((c) => c.id === look.character)!
   return <svg xmlns="http://www.w3.org/2000/svg" viewBox={portrait ? '80 55 340 355' : '0 0 500 520'} ref={svgRef} {...props}>
@@ -119,7 +120,8 @@ export function Capybara({ look, svgRef, happy = false, portrait = false, hairOf
     <path d="M250 307v12m-17-2q17 17 34 0" fill="none" stroke="#805b45" strokeWidth="3.5" strokeLinecap="round" />
     <g fill="#ac805e" opacity=".7"><circle cx="191" cy="305" r="2" /><circle cx="199" cy="316" r="2" /><circle cx="309" cy="305" r="2" /><circle cx="301" cy="316" r="2" /></g>
     <ScalpCap look={look} id={id} />
-    <g className="hair" fill="none" strokeLinecap="round" strokeLinejoin="round">
+    {/* Mitred joins paint far faster than round ones and look the same on hair this smooth. */}
+    <g className="hair" fill="none" strokeLinecap="round" strokeLinejoin="miter">
       {look.hair.map((strand, index) => {
         const path = strandPath(strand, index, hairOffsets?.[index])
         const wetness = strand.wetness ?? 0
@@ -135,10 +137,7 @@ export function Capybara({ look, svgRef, happy = false, portrait = false, hairOf
     </g>
     <SoapFoam look={look} offsets={hairOffsets} />
     <Decoration accessory={look.accessory} />
-    {airflowPoint && <g data-testid="airflow" transform={`translate(${airflowPoint.x} ${airflowPoint.y})`} pointerEvents="none" aria-hidden="true">
-      <path className="air-stream" d="M-6-8Q-28-30-20-48M0-10V-50M6-8Q28-30 20-48" fill="none" stroke="#eafaff" strokeWidth="3" strokeLinecap="round" />
-      <g transform="translate(-15 -2) rotate(-60 15 15)"><Icon name="blower" size={30} /></g>
-    </g>}
+    {airflow && <AirStream jet={airflow} id={id} />}
     {happy && <g fill="#e4b361"><path d="m123 245 4 10 11 3-11 4-4 10-3-10-11-4 11-3Zm247-90 3 8 9 3-9 3-3 8-3-8-8-3 8-3Z" /></g>}
   </svg>
 }

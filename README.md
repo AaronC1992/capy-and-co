@@ -64,7 +64,7 @@ Pages must be set to **Settings → Pages → Source: GitHub Actions**. Saved pi
 - **Curl:** make individual locks wavy.
 - **Soap:** rub across the hair to add thick lather and bubbles. Foam stays on those locks through other styling, tool changes, and saved pictures; it does not fade away.
 - **Wash:** rinse foam from the touched strands, restore the friend's original hair color, and remove curls. Keeps the brushed arrangement and haircut, and leaves hair visibly damp. Use "Do all the hair" to rinse everything.
-- **Blow-dry:** hold near a patch of hair to gradually dry it and blow it away from your finger. Move around to direct the breeze to different areas. Dry hair still flutters while blowing; the final shape stays when you release. It does not remove soap. "Do all the hair" dries and fluffs the whole head.
+- **Blow-dry:** hold the dryer near the hair and swipe the way you want the air to go. A visible stream of air blows every strand inside it: the hair streams out in that direction from the root, flaps along its length while the air is on it, and dries as it goes. Hair behind or beside the stream is left alone, and hair the air hits head-on folds outward. Swing the dryer around to blow different patches in different directions. The blown shape stays when you let go, including after reloading. It does not remove soap. "Do all the hair" dries and fluffs the whole head.
 - **Color:** choose one of eight colors, then paint the locks.
 - **Dress up:** choose a bow, daisy, crown, cherries, or star.
 - **Do all the hair:** apply the selected hair tool to every lock.
@@ -102,6 +102,7 @@ src/
     SalonRoom.tsx          Original illustrated salon background
     Studio.tsx             Mouse/touch/pen strokes and keyboard interaction
     useHairMotion.ts       Frame-scheduled animation and reduced-motion handling
+    AirStream.tsx          The visible stream of air that follows the dryer
     Toolbox.tsx            Tool, color, and accessory menus
     Gallery.tsx            Local snapshots, deletion, and picture downloads
     Modal.tsx              Focus-contained native dialogs
@@ -114,7 +115,8 @@ src/
     hairBrush.ts           Local brush contact and per-point strand bending
     hairMotion.ts          Per-point drag targets and root-anchored spring motion
     hairEditing.ts         Position-based cutting and timed, localized growth
-    hairBlower.ts          Continuous localized airflow and gradual drying
+    hairBlower.ts          Aimed dryer: swipe-direction wind, flapping, drying, and the swept pose
+    hairWind.ts            Pure wind geometry: stream cone, strength, and per-segment hair bending
     storage.ts             Versioned save validation and local persistence
     exportPhoto.ts         Self-contained SVG to PNG export
     audio.ts               Lazy Web Audio lifecycle
@@ -131,7 +133,7 @@ npm test
 npm run build
 ```
 
-81 automated tests cover initialization, rendering, fine-strand editing, the head-curve hairline and scalp cover, the local per-point brush (locality, fixed roots, no stretching, sideways folding, tip lag and swing, bounded slip, frame-rate independence, saved poses), continuous blow-drying, soap/rinsing, wetness, position-based cutting (including brushed and bent hair), hold-to-grow, gesture undo, character isolation, deformed-hair picking, older-save migration, shape validation, storage failure handling, and gallery snapshots.
+126 automated tests in 9 files cover initialization, rendering, fine-strand editing, the head-curve hairline and scalp cover, the local per-point brush (locality, fixed roots, no stretching, sideways folding, tip lag and swing, bounded slip, frame-rate independence, saved poses), the directional blow-dryer (swipe aiming, the wind cone and its edges, per-segment bending that keeps strand lengths, head-on folding, flapping, linear drying, frame-rate independence, stall handling, saved poses), efficient strand painting, soap/rinsing, wetness, position-based cutting (including brushed and bent hair), hold-to-grow, gesture undo, character isolation, deformed-hair picking, older-save migration, shape validation, storage failure handling, and gallery snapshots.
 
 Browser verification and the real-device checklist are recorded in [Development status](docs/DEVELOPMENT_STATUS.md). See [Architecture](docs/ARCHITECTURE.md) for the interaction and persistence design.
 

@@ -30,8 +30,27 @@ export function strandPoints(strand: Strand, index: number, extra?: HairShape): 
   })
 }
 
+// A point that could be skipped without moving the drawn line more than this many SVG units.
+export const PATH_TOLERANCE = 0.8
+
+function distanceToChord(point: Point, from: Point, to: Point): number {
+  const dx = to.x - from.x
+  const dy = to.y - from.y
+  const length = Math.hypot(dx, dy)
+  return length === 0
+    ? Math.hypot(point.x - from.x, point.y - from.y)
+    : Math.abs((point.x - from.x) * dy - (point.y - from.y) * dx) / length
+}
+
+// Painting is what slows the studio down when plenty of hair moves at once. Straight hair looks just as smooth
+// drawn through every other point, so only the odd points that sit on a visible bend are kept. Curls need all.
 export function strandPath(strand: Strand, index: number, extra?: HairShape): string {
-  return strandPoints(strand, index, extra).map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ')
+  const points = strandPoints(strand, index, extra)
+  return points
+    .filter((point, step) => strand.curl || step % 2 === 0 || step === HAIR_POINTS
+      || distanceToChord(point, points[step - 1], points[step + 1]) > PATH_TOLERANCE)
+    .map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x.toFixed(1)},${p.y.toFixed(1)}`)
+    .join(' ')
 }
 
 export function hitHair(look: Look, point: Point, offsets?: HairOffsets): number[] {

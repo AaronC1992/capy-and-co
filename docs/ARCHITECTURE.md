@@ -12,7 +12,7 @@ React + strict TypeScript + Vite, with original SVG illustrations. A 2D salon do
 - `style` applies a tool to explicit strand indices.
 - `comb` straightens contacted locks and commits each one's brushed shape (a per-point displacement) when a brush drag ends.
 - `lengths` applies bounded per-lock length changes from continuous cutting or growth. Trimming scales the saved bend and truncates the brushed shape; growing scales the shape with the new length. Unchanged values are skipped so no extra history is created.
-- `air` applies bounded two-axis poses and wetness updates from continuous blow-drying.
+- `air` applies the blown pose (a saved per-point `shape`) and wetness updates from the blow-dryer, as one undo step.
 - `accessory` changes the selected decoration.
 - `undo` restores the previous look.
 - `reset` restores that friend's default look.
@@ -55,7 +55,19 @@ Brushed strands can leave the crown, so a `ScalpCap` in `Capybara` draws a band 
 
 Curling, soaping, washing, and painting apply once per lock per gesture while continuously detecting newly crossed locks. Soap and Wash do not pull the hair away from the finger. Soap remains through other tools; Wash clears it locally, restores the original dye, and removes curls without resetting the saved brush arrangement. Whole-head actions cover all locks. All changes in one gesture share an undo checkpoint, including later cuts, growth frames, and the final brush pose. Undo/reset clear residual motion and stop active growth. The keyboard/whole-head shortcut retains its discrete one-step trim/grow behavior.
 
-`HairBlower` uses a wider local contact area, then holds that selection while stationary so the wind does not stop as the tips move away. Moving replaces the held area and covers crossed strands. Air pushes away from the current pointer location, adds a bounded flutter, and dries at 0.65 wetness units per second. It shares a monotonic clock between pointer events and animation frames, with a 50 ms stall cap. Reduced motion removes the flutter. Air edits update the saved pose directly, so release does not spring back. Cancellation, blur, hiding the page, and changing tools/friends stop airflow; a gesture is one undo action. Soap and Wash set wetness to 1, while the dryer preserves soap until rinsed.
+### Blow-dryer model
+
+`hairWind.ts` holds the pure geometry and `hairBlower.ts` the state of one dryer gesture.
+
+- **Aim.** The dryer blows the way the finger swipes. Until the finger has travelled `FIRST_SWIPE` (5) units the aim points away from the middle of the head, so a wobble at touch-down cannot turn the wind. After that the aim eases toward the direction of travel by `min(1, distance / 30)` each move. The nozzle sits 50 units (`WIND_BACK`) behind the fingertip, so the fingertip is inside the stream.
+- **Stream.** `windStrength(jet, point)` is reach times lateral falloff. Reach ramps in over the 36 units around the nozzle, holds, and fades over the far 45% of the 280-unit range. The lateral falloff is a cone whose half-width grows from 32 units at the nozzle by 0.38 per unit of distance, with a soft edge. Hair outside the cone is not touched at all: its strand objects stay identical.
+- **Bending.** `bendInWind` turns each segment of a strand about its own start toward the wind heading by `give x lean`. `give` rises from 30% at the root to 100% about two thirds of the way along. Every segment keeps its length and the root never moves, so a strand streams out along the wind like a real lock instead of sliding sideways in one piece. When the air meets a strand head-on, the segments fold outward away from the middle of the head (`HEAD_ON`), so upright hair does not fold straight back onto the scalp.
+- **Flapping.** While the air is on a strand, a traveling wave (about 22 rad/s, lagging toward the tip and growing with it) swings the segments from side to side. Its strength follows the air at each point, so it dies away with the air. Each strand has its own phase and rate, and a slow gust variation keeps neighbors from flapping in step. Reduced motion removes the flap and the gusts, which also makes the pose exactly frame-rate independent for a stationary finger.
+- **Drying.** Each strand in the air loses 0.9 wetness per second at full strength. Time comes from one monotonic clock shared between pointer events and animation frames, with a 50 ms stall cap. Dry strands produce no edits. Soap stays until rinsed.
+- **Keeping the pose.** `HairMotion.blow(poses)` holds the blown strands and points their spring at each wind pose, using a stiffer and whippier `WIND_SPRING` than the brush so the tips whip and the hair can flap. A strand that leaves the air keeps 85% of its strongest bend. When the gesture ends, `settled()` supplies the flap-free pose; `Studio` commits it with the same rebase the brush uses and saves it in one `air` action (`{ index, shape }`), then releases the spring so the hair settles without a jump. The whole gesture is one undo step, and cancellation, blur, hiding the page, and changing tools or friends stop the air.
+- **Feedback.** `AirStream` draws the stream along the same jet that bends the hair (a translucent cone, five moving lanes, and the dryer icon turned to face the wind). It is transient and never included in saved pictures.
+
+Soap and Wash set wetness to 1, while the dryer preserves soap until rinsed. Hair strands are drawn with adaptive decimation (`strandPath`): odd points are skipped where they sit within `PATH_TOLERANCE` (0.8 units) of the chord between their neighbours, which cuts paint work for straight hair while leaving curls and bends exact.
 
 Mouse, touch, and pen all emit the same reducer actions. Keyboard and the whole-head shortcut use that same interface. `touch-action: none` is scoped to the interactive character; the rest of the page retains normal touch scrolling and zoom behavior.
 

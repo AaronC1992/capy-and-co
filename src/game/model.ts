@@ -56,9 +56,10 @@ export interface HairCombEdit {
 
 export interface HairAirEdit {
   index: number
-  bendX: number
-  bendY: number
-  wetness: number
+  // Omit to leave the strand as damp as it is.
+  wetness?: number
+  // Blown pose to save so the hair stays swept; omit to leave it unchanged, null clears it.
+  shape?: HairShape | null
 }
 
 export type Looks = Record<CharacterId, Look>
@@ -140,19 +141,19 @@ export function applyHairLengths(look: Look, edits: HairLengthEdit[]): Look {
 }
 
 export function applyHairAir(look: Look, edits: HairAirEdit[]): Look {
-  const selected = new Map(edits.filter(({ index, bendX, bendY, wetness }) =>
-    Number.isInteger(index) && index >= 0 && index < STRAND_COUNT && [bendX, bendY, wetness].every(Number.isFinite),
-  ).map((edit) => [edit.index, edit]))
+  const selected = new Map(edits.filter(({ index, wetness, shape }) => Number.isInteger(index) && index >= 0 && index < STRAND_COUNT
+    && (wetness === undefined || Number.isFinite(wetness))
+    && (shape === undefined || shape === null || isPlainShape(shape))).map((edit) => [edit.index, edit]))
   let changed = false
   const hair = look.hair.map((strand, index) => {
     const edit = selected.get(index)
     if (!edit) return strand
-    const bendX = Math.max(HAIR_BEND_LIMITS.minX, Math.min(HAIR_BEND_LIMITS.maxX, edit.bendX))
-    const bendY = Math.max(HAIR_BEND_LIMITS.minY, Math.min(HAIR_BEND_LIMITS.maxY, edit.bendY))
-    const wetness = Math.max(0, Math.min(1, edit.wetness))
-    if (bendX === (strand.bendX ?? 0) && bendY === (strand.bendY ?? 0) && wetness === (strand.wetness ?? 0)) return strand
+    const wetness = edit.wetness === undefined ? undefined : Math.max(0, Math.min(1, edit.wetness))
+    const wetnessChanged = wetness !== undefined && wetness !== (strand.wetness ?? 0)
+    const shape = edit.shape === undefined ? strand.shape : normalizeShape(edit.shape)
+    if (!wetnessChanged && shape === strand.shape) return strand
     changed = true
-    return { ...strand, bendX, bendY, wetness }
+    return withShape(wetnessChanged ? { ...strand, wetness } : strand, shape)
   })
   return changed ? { ...look, hair } : look
 }

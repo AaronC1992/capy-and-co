@@ -11,7 +11,7 @@ The fantasy RPG/VR project was cancelled before implementation. The current deli
 - Local per-strand brushing: only hair under the finger bends, each strand flexes along its length from a fixed root, swings and trails like loose hair, and the full brushed shape is saved.
 - 65 fine, independent strands with brush, trim, regrow, curl, soap, wash, blow-dry, and eight-color painting.
 - A hairline that follows the head curve, with a color-matched scalp cover so brushing hair aside never shows a bald top.
-- Continuous hold-and-drag airflow, visible dampness, gradual drying, and retained blown hairstyles.
+- A directional, flapping blow-dryer: it blows every strand in its stream the way the finger swipes, streams the hair out from the root, flaps it while the air is on it, dries it gradually, and keeps the swept shape.
 - Thick persistent lather that follows styled hair, rinses locally, and appears in saved/exported pictures.
 - Continuous position-based scissors and localized hold-to-grow, including repeated edits within one undoable touch.
 - Five accessories plus removal.
@@ -33,7 +33,7 @@ Executed during implementation:
 | Check | Result |
 | --- | --- |
 | TypeScript strict checking | Passed |
-| Vitest | 81 tests passed across 7 files; exit code 0 |
+| Vitest | 126 tests passed across 9 files; exit code 0 |
 | Vite production build | Passed |
 | Local server HTTP response | 200 |
 
@@ -178,7 +178,7 @@ Verification:
 ### Fine hair and blow-drying
 
 - Replaced 13 thick locks with 65 finer strands (55 top / 10 side). Colored strokes are now 5.2 SVG units rather than 25. Each strand remains independently editable; all existing tools share the updated drawing/picking geometry.
-- Blow-dry runs continuously while held or dragged, pushes nearby hair away from the pointer, and gradually removes dampness. Hair keeps its final blown shape as requested. Moving changes the local target area; release/cancel/tool changes stop the breeze.
+- Blow-dry runs continuously while held or dragged and gradually removes dampness. Hair keeps its final blown shape as requested. (The first version pushed nearby hair away from the pointer; it was replaced by the directional dryer described below.) Release/cancel/tool changes stop the breeze.
 - Soap and Wash make hair visibly damp. Drying removes the darker wet sheen and droplets, but does not rinse soap. Whole-head Blow-dry dries and fluffs all strands. Reduced motion disables continuous flutter.
 - Lather uses five small bubbles per fine strand, bounded at 325 for the full head. Tablet framing provides more room above blown hair.
 - Existing looks and photos migrate to the finer hair without losing styling, colors, lengths, accessories, or soap. The save envelope is now version 2, using the existing storage key.
@@ -195,6 +195,26 @@ Verification:
 - All eight tools remained at least 44 x 44 pixels, without horizontal overflow at widths 320, 390, 768, 1024, and 1440.
 - The final tablet-framing check kept all 65 blown tips inside the studio (about 48 pixels of minimum top clearance for the tested look); dryer pointer targeting still worked after resizing.
 - No page errors occurred during the continuous dryer flow. Testing used browser touch emulation, not a physical tablet.
+
+### Powerful, directional blow-dryer
+
+Feedback: the dryer needed to be much more powerful, to really blow the hair around and make it flap, with all the hair in its path affected by the direction it blows.
+
+Change:
+
+- Direction: the dryer blows the way the finger swipes (`hairBlower.ts`), through a cone that starts behind the fingertip (`hairWind.ts`). Every strand in the cone is blown, not only the ones under the finger, and hair behind or beside the cone is not touched at all.
+- Bending: each strand turns segment by segment toward the wind with its root fixed and its length preserved, so it streams out in a smooth curve instead of sliding sideways in one piece. Hair the air meets head-on folds outward from the middle of the head.
+- Flapping: hair in the air flaps with a traveling wave that grows toward the tip and has gentle gusts. The flapping dies away when the air does, and reduced motion removes it.
+- Keeping the pose: the swept (flap-free) pose is saved as a normal per-point `shape` through the `air` action, so it survives release, reload and saved pictures, and one Undo reverts the gesture. Drying runs at 0.9 wetness per second at full strength; soap stays.
+- Feedback: `AirStream` draws the stream (cone, moving lanes, and a dryer icon turned to face the wind) along the same jet that bends the hair.
+- Performance: while the dryer was held, painting took 46-61 ms per frame. Lazily creating the motion state, miter joins instead of round joins, and adaptive path decimation (`strandPath`, `PATH_TOLERANCE` 0.8) brought a held dryer to about 19-20 ms per frame on average (median 16.7 ms), measured in a production build in Chromium on the development PC.
+
+Verification:
+
+- `npm run typecheck`, `npm test` (126 passed in 9 files), and `npm run build` all passed with exit code 0.
+- New tests cover the stream's reach and edges, per-segment bending that keeps lengths, head-on folding with left/right symmetry, flapping and its limits, swipe aiming (including a first swipe that starts left of the head and a touch-down wobble), linear drying, frame-rate independence at 30/60/120 fps, long-stall handling, saved poses, and the spring layer's handling of blown strands and malformed poses.
+- Chromium mouse: rightward, leftward and downward swipes blew the hair that way and the nozzle followed the finger. Strands flapped while the air was held still. Only the strands behind the nozzle were untouched. The swept shape stayed after release and after reload, soap stayed while dampness dropped, one Undo restored the gesture, and there were no console errors.
+- Not verified: how it feels or performs on a physical tablet. The frame times above are from a desktop PC.
 
 Executed with Chromium browser automation:
 
@@ -226,8 +246,8 @@ Use a current Chrome/Edge desktop browser, Android Chrome, and iPad/iPhone Safar
 - [ ] With Brush, drag a fingertip through one small patch of hair; only the strands under your finger should bend, with the neighbors easing off gradually. Brush right, left, up, and down without lifting; the hair should stay where you leave it after release and reload.
 - [ ] Swipe Soap across a patch, switch tools, and wait; its bubbles should stay. Brush the soaped patch and check the bubbles move with it.
 - [ ] Wash one soaped patch without rinsing the others, then use whole-head Wash. Save a soapy picture and confirm later washing does not change that picture.
-- [ ] Wash, then hold Blow-dry near one damp patch; check that it dries gradually and blows away from the finger. Move to another patch and confirm the first stops changing.
-- [ ] Release Blow-dry and reload: the dry state and new shape should remain. Blow-drying soapy hair must not remove its bubbles.
+- [ ] Wash, then hold Blow-dry near one damp patch and swipe it across the hair; every strand in the stream should be blown the way you swipe, flap while the air is on it, and dry gradually. Hair behind the dryer should not move. Move to another patch and confirm the first stops changing.
+- [ ] Release Blow-dry and reload: the dry state and the blown shape should remain. Blow-drying soapy hair must not remove its bubbles. Check that blowing stays smooth (no stutter) on the tablet.
 - [ ] With Snip, draw a cut line and revisit the same area lower down without lifting; only the crossed locks should shorten.
 - [ ] With Grow, hold one patch still, slide to another, then release; growth should follow the finger and stop immediately on release.
 - [ ] Cut a lock short, then regrow it. Try brush, curls, dye, and wash.
