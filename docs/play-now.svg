@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="360" height="88" viewBox="0 0 360 88" role="img" aria-label="Play now">
+  <title>Play now</title>
+  <defs>
+    <linearGradient id="face" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffa79a"/>
+      <stop offset="1" stop-color="#f27a73"/>
+    </linearGradient>
+  </defs>
+  <rect x="4" y="12" width="352" height="72" rx="36" fill="#b4504f" opacity="0.9"/>
+  <rect x="4" y="4" width="352" height="72" rx="36" fill="url(#face)" stroke="#fff6ec" stroke-width="4"/>
+  <path d="M30 22c40-9 260-9 300 0" fill="none" stroke="#ffffff" stroke-opacity="0.45" stroke-width="5" stroke-linecap="round"/>
+  <circle cx="62" cy="40" r="22" fill="#fff6ec"/>
+  <path d="M56 28l18 12-18 12z" fill="#e0605c" stroke="#e0605c" stroke-width="4" stroke-linejoin="round"/>
+  <text x="214" y="52" text-anchor="middle" font-family="'Trebuchet MS','Segoe UI',Verdana,sans-serif" font-size="34" font-weight="800" fill="#ffffff" stroke="#b4504f" stroke-width="1.2" paint-order="stroke">Play now!</text>
+</svg>
