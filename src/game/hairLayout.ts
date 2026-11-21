@@ -13,6 +13,12 @@ export const HAIR_SHAPE_LIMIT = 300
 // x/y pairs for drawn points 1..24; the root point never moves.
 export type HairShape = readonly number[]
 
+// One strand's pose as displacements from its saved pose, in the same layout as a brushed shape.
+export interface StrandPose {
+  index: number
+  offsets: HairShape
+}
+
 export function isSideStrand(index: number): boolean {
   return index % HAIR_GROUP_COUNT > 10
 }

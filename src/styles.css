@@ -64,7 +64,7 @@ h1 svg { width: 28px; height: 36px; margin-left: 10px; margin-bottom: 10px; colo
 .salon-room { width: 100%; height: 100%; position: absolute; inset: 0; z-index: -1; }
 .studio-capy { height: calc(100% - 24px); width: auto; max-width: 100%; position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%); touch-action: none; user-select: none; -webkit-user-select: none; cursor: grab; }
 .studio-capy:active { cursor: grabbing; }
-.tool-snip .studio-capy, .tool-grow .studio-capy, .tool-soap .studio-capy, .tool-wash .studio-capy, .tool-blower .studio-capy, .tool-color .studio-capy { cursor: crosshair; }
+.tool-comb .studio-capy, .tool-snip .studio-capy, .tool-grow .studio-capy, .tool-soap .studio-capy, .tool-wash .studio-capy, .tool-blower .studio-capy, .tool-color .studio-capy { cursor: crosshair; }
 .air-stream { stroke-dasharray: 9 12; animation: blow-air .26s linear infinite; }
 @keyframes blow-air { to { stroke-dashoffset: -42; } }
 .studio-capy:focus-visible { outline-offset: -8px; border-radius: 60px; }
@@ -90,6 +90,7 @@ h1 svg { width: 28px; height: 36px; margin-left: 10px; margin-bottom: 10px; colo
 .tool-tabs button[aria-selected="true"] { background: #fffefa; color: #53634a; box-shadow: 0 1px 4px #60684b13; font-weight: 600; }
 .tool-content { min-height: 265px; }
 .tool-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
+.styling-tool-grid > .tool-button:last-child:nth-child(odd) { grid-column: 1 / -1; }
 .tool-button { min-height: 85px; background: #faf9f4; border: 1px solid #eae9df; border-radius: 12px; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 10px 4px; position: relative; }
 .tool-illustration { height: 35px; display: flex; align-items: center; justify-content: center; color: #6f755f; }
 .tool-illustration svg { transform: rotate(-13deg); }
@@ -261,6 +262,7 @@ h1 svg { width: 28px; height: 36px; margin-left: 10px; margin-bottom: 10px; colo
   .tool-tabs { margin: 17px 0; }
   .tool-tabs button { min-height: 40px; font-size: 12px; }
   .tool-grid { grid-template-columns: repeat(3, 1fr); gap: 9px; }
+  .styling-tool-grid > .tool-button:last-child:nth-child(odd) { grid-column: auto; }
   .tool-content { min-height: 205px; }
   .tool-button { min-height: 96px; }
   .tool-label { font-size: 12px; }

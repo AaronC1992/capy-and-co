@@ -1,6 +1,6 @@
 import type { Point } from './hair'
 import { HAIR_POINTS, HAIR_SHAPE_LENGTH } from './hairLayout'
-import type { HairShape } from './hairLayout'
+import type { StrandPose } from './hairLayout'
 
 // A stream of air: where it leaves the blower and which way it blows (a unit vector), in studio units.
 export interface AirJet {
@@ -8,11 +8,8 @@ export interface AirJet {
   direction: Point
 }
 
-// One strand's blown pose, as displacements from its saved pose in the same layout as a brushed shape.
-export interface WindPose {
-  index: number
-  offsets: HairShape
-}
+// One strand's blown pose, as displacements from its saved pose.
+export type WindPose = StrandPose
 
 // A strand's resting segments, measured once so every frame only has to turn them.
 export interface WindChain {

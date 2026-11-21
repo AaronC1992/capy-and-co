@@ -6,6 +6,7 @@ import { Icon } from './Icon'
 
 const TOOLS: { id: Tool; label: string; note: string; tint: string }[] = [
   { id: 'brush', label: 'Brush', note: 'Style it. Keep it.', tint: 'mint' },
+  { id: 'comb', label: 'Comb', note: 'Gel-smooth control', tint: 'mint' },
   { id: 'snip', label: 'Snip', note: 'A fresh little trim', tint: 'pink' },
   { id: 'grow', label: 'Grow', note: 'Long hair, don’t care', tint: 'rose' },
   { id: 'curl', label: 'Curl', note: 'A little extra bounce', tint: 'yellow' },

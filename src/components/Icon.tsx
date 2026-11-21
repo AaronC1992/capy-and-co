@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react'
 
-export type IconName = 'sparkles' | 'heart' | 'camera' | 'gallery' | 'undo' | 'reset' | 'sound' | 'muted' | 'close' | 'download' | 'trash' | 'arrow' | 'check' | 'brush' | 'snip' | 'grow' | 'curl' | 'soap' | 'wash' | 'blower' | 'color' | 'bow' | 'flower' | 'crown' | 'cherries' | 'star' | 'none' | 'help'
+export type IconName = 'sparkles' | 'heart' | 'camera' | 'gallery' | 'undo' | 'reset' | 'sound' | 'muted' | 'close' | 'download' | 'trash' | 'arrow' | 'check' | 'brush' | 'comb' | 'snip' | 'grow' | 'curl' | 'soap' | 'wash' | 'blower' | 'color' | 'bow' | 'flower' | 'crown' | 'cherries' | 'star' | 'none' | 'help'
 
 const paths: Record<IconName, React.ReactNode> = {
   sparkles: <><path d="m12 3 2.4 6.6L21 12l-6.6 2.4L12 21l-2.4-6.6L3 12l6.6-2.4Z" /><path d="m20 2 .7 2.3L23 5l-2.3.7L20 8l-.7-2.3L17 5l2.3-.7Z" /></>,
@@ -17,6 +17,7 @@ const paths: Record<IconName, React.ReactNode> = {
   arrow: <path d="M4 12h16m-6-6 6 6-6 6" />,
   check: <path d="m5 12 4 4L20 5" />,
   brush: <><path fill="#9ac5ad" d="M7 3h9a3 3 0 0 1 3 3v5a4 4 0 0 1-4 4h-1v6h-4v-6H9a4 4 0 0 1-4-4V6a3 3 0 0 1 2-3Z" /><path d="M9 6v5m3-5v5m3-5v5" /></>,
+  comb: <><rect fill="#c3d8a9" x="2.5" y="3" width="19" height="6" rx="2.5" /><path d="M5 9v10m3.5-10v11m3.5-11v11m3.5-11v11M19 9v10" /></>,
   snip: <><circle fill="#f1aaa1" cx="6" cy="17" r="4" /><circle fill="#f1aaa1" cx="18" cy="17" r="4" /><path d="m8 14 9-12M16 14 7 2" /><circle cx="12" cy="9" r="1" fill="currentColor" /></>,
   grow: <><path fill="#e5afc8" d="M9 3h6v6l5 8c1 2 0 4-3 4H7c-3 0-4-2-3-4l5-8Z" /><path d="M8 3h8M7 14h10m-5 1v4m-2-2h4" /></>,
   curl: <><path fill="#edce87" d="m8 4 5-2 6 15-5 2Z" /><path d="m14 19 1 3M5 6c-7 5 7 5 0 11M12 5l4-2" /></>,

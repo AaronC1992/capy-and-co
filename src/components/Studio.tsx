@@ -10,6 +10,7 @@ import { Icon } from './Icon'
 import { useHairMotion } from './useHairMotion'
 import { cutHairStroke, HairGrowth } from '../game/hairEditing'
 import { HairBlower } from '../game/hairBlower'
+import { HairComb } from '../game/hairComb'
 import type { AirJet } from '../game/hairWind'
 import { addShape } from '../game/hairLayout'
 
@@ -24,6 +25,7 @@ interface Props {
 
 export const TOOL_HINTS: Record<Tool, string> = {
   brush: 'Brush right where you touch! Hair stays where you leave it.',
+  comb: 'Trace a path with the comb! The hair lies along your line.',
   snip: 'Drag to cut right where your finger goes.',
   grow: 'Hold to grow! Slide to another patch of hair.',
   curl: 'Swipe the hair for bouncy, happy curls.',
@@ -41,6 +43,7 @@ interface HairGesture {
   look: Look
   growth: HairGrowth | null
   blower: HairBlower | null
+  comb: HairComb | null
 }
 
 export function Studio({ look, tool, color, dispatch, onStyle, canUndo }: Props) {
@@ -120,6 +123,23 @@ export function Studio({ look, tool, color, dispatch, onStyle, canUndo }: Props)
     markTouched(current, poses.map(({ index }) => index))
   }
 
+  // The comb takes hold of the hair it touches and lays it along the line the finger draws. Nothing is
+  // saved until the finger lifts.
+  function combHair(current: HairGesture, comb: HairComb, point: Point) {
+    const taken = comb.move(look, point, motion.current.offsets())
+    const curly = taken.filter((index) => look.hair[index].curl)
+    if (curly.length) {
+      // Combing smooths curls out at once, so the hair is drawn the way it will be saved.
+      dispatch({ type: 'pose', locks: curly.map((index) => ({ index, flow: look.hair[index].flow })), checkpoint: !current.started })
+      current.started = true
+    }
+    if (taken.length) markTouched(current, taken)
+    const poses = comb.poses()
+    if (!poses.length) return
+    motion.current.comb(poses)
+    animate()
+  }
+
   function editOnFrame(now: number): boolean {
     const current = gesture.current
     if (!current || current.look.character !== look.character || document.hidden) return false
@@ -157,13 +177,17 @@ export function Studio({ look, tool, color, dispatch, onStyle, canUndo }: Props)
       animate()
       return
     }
+    if (current.comb) {
+      combHair(current, current.comb, point)
+      return
+    }
     // The brush only touches the hair directly under the fingertip; other tools affect a wider patch.
     const hits = tool === 'brush' ? motion.current.drag(look, current.last, point, true) : hitHairStroke(look, current.last, point, motion.current.offsets())
     if (tool === 'curl' || tool === 'color') motion.current.drag(look, current.last, point)
     const fresh = hits.filter((index) => !current.touched.has(index))
     if (fresh.length) {
       if (tool === 'brush') {
-        dispatch({ type: 'comb', locks: fresh.map((index) => ({ index, flow: look.hair[index].flow })), checkpoint: !current.started })
+        dispatch({ type: 'pose', locks: fresh.map((index) => ({ index, flow: look.hair[index].flow })), checkpoint: !current.started })
       } else {
         dispatch({ type: 'style', tool, strands: fresh, color, direction: 0, checkpoint: !current.started })
       }
@@ -189,6 +213,7 @@ export function Studio({ look, tool, color, dispatch, onStyle, canUndo }: Props)
       look,
       growth: tool === 'grow' ? new HairGrowth(look, point, performance.now()) : null,
       blower: tool === 'blower' ? new HairBlower(look, point, performance.now(), matchMedia('(prefers-reduced-motion: reduce)').matches) : null,
+      comb: tool === 'comb' ? new HairComb(point) : null,
     }
     stroke(point)
   }
@@ -200,14 +225,15 @@ export function Studio({ look, tool, color, dispatch, onStyle, canUndo }: Props)
     current.growth?.stop()
     current.blower?.stop()
     gesture.current = null
-    if (tool === 'brush' && current.started) {
-      // The last brushed position becomes the strand's resting shape, so the hair stays where it was left.
+    if (current.comb) motion.current.comb(current.comb.poses())
+    if (current.comb || (tool === 'brush' && current.started)) {
+      // The last brushed or combed position becomes the strand's resting shape, so the hair stays where it was left.
       const locks = motion.current.heldStrands().flatMap((index) => {
         const strand = look.hair[index]
         const shift = motion.current.commit(index)
         return shift ? [{ index, flow: strand.flow, shape: addShape(strand.shape, shift) ?? null }] : []
       })
-      if (locks.length) dispatch({ type: 'comb', locks, checkpoint: false })
+      if (locks.length) dispatch({ type: 'pose', locks, checkpoint: !current.started })
     }
     if (swept.length) {
       // Blown hair stays swept the way the air left it, minus the flapping.

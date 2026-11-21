@@ -4,6 +4,7 @@ import { BRUSH_RADIUS, brushContact } from './hairBrush'
 import { hitHairStroke, strandPoints } from './hair'
 import type { Point } from './hair'
 import { addShape, HAIR_SHAPE_LENGTH } from './hairLayout'
+import type { StrandPose } from './hairLayout'
 import type { WindPose } from './hairWind'
 import { createLook } from './model'
 import type { Look } from './model'
@@ -315,6 +316,78 @@ describe('wind-blown hair', () => {
   it('snaps straight to the blown pose under reduced motion', () => {
     const motion = new HairMotion()
     motion.blow([swept(60)])
+    expect(motion.step(1 / 60, true)).toBe(false)
+    expect(tip(motion)).toBe(60)
+  })
+})
+
+describe('gel-combed hair', () => {
+  // A pose that lays the strand out to the right, growing toward the tip like a combed lock.
+  const laid = (reach: number, index = STRAND): StrandPose => ({
+    index,
+    offsets: Array.from({ length: HAIR_SHAPE_LENGTH }, (_, slot) => (slot % 2 === 0 ? (reach * ((slot >> 1) + 1)) / 24 : 0)),
+  })
+  const tip = (motion: HairMotion) => motion.offsets()[STRAND]![HAIR_SHAPE_LENGTH - 2]
+
+  it('settles on the combed pose without swinging past it', () => {
+    const motion = new HairMotion()
+    motion.comb([laid(60)])
+    let furthest = 0
+    for (let frame = 0; frame < 240; frame++) {
+      motion.step(1 / 60)
+      furthest = Math.max(furthest, tip(motion))
+    }
+    expect(furthest).toBeLessThanOrEqual(60 + 1e-6)
+    expect(tip(motion)).toBeCloseTo(60, 1)
+  })
+  it('catches up with the comb within a fraction of a second', () => {
+    const motion = new HairMotion()
+    motion.comb([laid(60)])
+    advance(motion, 0.15)
+    expect(tip(motion)).toBeGreaterThan(60 * 0.9)
+  })
+  it('moves the same whatever the frame rate', () => {
+    const fast = new HairMotion()
+    const slow = new HairMotion()
+    fast.comb([laid(60)])
+    slow.comb([laid(60)])
+    advance(fast, 0.25, 120)
+    advance(slow, 0.25, 30)
+    expect(tip(slow)).toBeCloseTo(tip(fast), 1)
+  })
+  it('ignores poses that are malformed or for hair that does not exist', () => {
+    const motion = new HairMotion()
+    const good = laid(30)
+    motion.comb([
+      { ...good, offsets: good.offsets.slice(1) },
+      { ...good, offsets: good.offsets.map((value, slot) => (slot === 3 ? Number.NaN : value)) },
+      { ...good, index: -1 },
+      { ...good, index: 65 },
+    ])
+    expect(motion.heldStrands()).toEqual([])
+    expect(motion.offsets()).toEqual([])
+  })
+  it('keeps the combed pose when committed, with no visual jump', () => {
+    const look = createLook('mochi')
+    const motion = new HairMotion()
+    motion.comb([laid(60)])
+    advance(motion, 1)
+    const before = strandPoints(look.hair[STRAND], STRAND, motion.offsets()[STRAND])
+    const shift = motion.commit(STRAND)
+    expect(shift).toHaveLength(HAIR_SHAPE_LENGTH)
+    look.hair[STRAND] = { ...look.hair[STRAND], shape: addShape(look.hair[STRAND].shape, shift!) }
+    strandPoints(look.hair[STRAND], STRAND, motion.offsets()[STRAND]).forEach((point, step) => {
+      expect(point.x).toBeCloseTo(before[step].x, 8)
+      expect(point.y).toBeCloseTo(before[step].y, 8)
+    })
+    motion.release()
+    advance(motion, 3)
+    expect(motion.offsets()[STRAND]).toBeUndefined()
+    expect(strandPoints(look.hair[STRAND], STRAND)[24].x).toBeCloseTo(restPoint(createLook('mochi'), STRAND, 24).x + 60, 1)
+  })
+  it('snaps straight to the combed pose under reduced motion', () => {
+    const motion = new HairMotion()
+    motion.comb([laid(60)])
     expect(motion.step(1 / 60, true)).toBe(false)
     expect(tip(motion)).toBe(60)
   })

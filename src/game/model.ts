@@ -10,7 +10,7 @@ export const CHARACTERS = [
 ] as const
 
 export type CharacterId = typeof CHARACTERS[number]['id']
-export type Tool = 'brush' | 'snip' | 'grow' | 'curl' | 'soap' | 'wash' | 'blower' | 'color'
+export type Tool = 'brush' | 'comb' | 'snip' | 'grow' | 'curl' | 'soap' | 'wash' | 'blower' | 'color'
 export const ACCESSORIES = ['none', 'bow', 'flower', 'crown', 'cherries', 'star'] as const
 export type Accessory = typeof ACCESSORIES[number]
 export const COLORS = ['#eb9c95', '#b5a0d8', '#8cbfc4', '#a6bd87', '#e5b75c', '#c07955', '#6e5147', '#f3e1bd'] as const
@@ -45,12 +45,13 @@ export interface HairLengthEdit {
   shape?: HairShape | null
 }
 
-export interface HairCombEdit {
+// A strand left in a new pose by the brush or the comb.
+export interface HairPoseEdit {
   index: number
   flow: number
   bendX?: number
   bendY?: number
-  // Complete brushed pose; omit to leave it unchanged, null clears it.
+  // Complete styled pose; omit to leave it unchanged, null clears it.
   shape?: HairShape | null
 }
 
@@ -73,7 +74,7 @@ export interface SalonState {
 export type SalonAction =
   | { type: 'select'; character: CharacterId }
   | { type: 'style'; tool: Tool; strands: number[]; color: string; direction: number; checkpoint: boolean }
-  | { type: 'comb'; locks: HairCombEdit[]; checkpoint: boolean }
+  | { type: 'pose'; locks: HairPoseEdit[]; checkpoint: boolean }
   | { type: 'lengths'; edits: HairLengthEdit[]; checkpoint: boolean }
   | { type: 'air'; edits: HairAirEdit[]; checkpoint: boolean }
   | { type: 'accessory'; accessory: Accessory }
@@ -180,7 +181,7 @@ export function salonReducer(state: SalonState, action: SalonAction): SalonState
     const next = applyHairAir(current, action.edits)
     return next === current ? state : { ...state, looks: { ...state.looks, [state.active]: next }, history: action.checkpoint ? remember(state) : state.history }
   }
-  if (action.type === 'comb') {
+  if (action.type === 'pose') {
     const locks = new Map(action.locks.filter(({ index, flow, bendX, bendY, shape }) => Number.isInteger(index) && index >= 0 && index < STRAND_COUNT && Number.isFinite(flow)
       && (bendX === undefined || Number.isFinite(bendX)) && (bendY === undefined || Number.isFinite(bendY))
       && (shape === undefined || shape === null || isPlainShape(shape))).map((lock) => [lock.index, lock]))
@@ -204,7 +205,8 @@ export function salonReducer(state: SalonState, action: SalonAction): SalonState
       case 'snip': return resized(strand, i, Math.max(0.08, strand.length - 0.2))
       case 'grow': return resized(strand, i, Math.min(1, strand.length + 0.2))
       case 'curl': return { ...strand, curl: true }
-      case 'brush': return { ...strand, curl: false, flow: Math.max(-1, Math.min(1, action.direction)) }
+      case 'brush':
+      case 'comb': return { ...strand, curl: false, flow: Math.max(-1, Math.min(1, action.direction)) }
       case 'color': return { ...strand, color: action.color }
       case 'soap': return { ...strand, soapy: true, wetness: 1 }
       case 'wash': return { ...strand, color: CHARACTERS.find((friend) => friend.id === state.active)!.hair, curl: false, soapy: false, wetness: 1 }

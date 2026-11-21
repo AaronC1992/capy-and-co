@@ -2,17 +2,18 @@ import { strandPoints } from './hair'
 import type { HairOffsets, Point } from './hair'
 import { bendStrand, brushContact, brushSlip } from './hairBrush'
 import { HAIR_POINTS, HAIR_SHAPE_LENGTH, roundShape, STRAND_COUNT } from './hairLayout'
-import type { HairShape } from './hairLayout'
+import type { HairShape, StrandPose } from './hairLayout'
 import type { Look } from './model'
-import type { WindPose } from './hairWind'
 
 // Hair is stiffest at the scalp and floppy toward the tip, so the tip trails the finger and swings
 // after it. Each strand is a little different, so a swipe fans out instead of moving as one plank.
 interface SpringSetting { stiffness: number; tipSoftness: number; rootDamping: number; tipDamping: number }
-const HELD_SPRING: SpringSetting = { stiffness: 240, tipSoftness: 0.7, rootDamping: 0.75, tipDamping: 0.5 }
+const FINGER_SPRING: SpringSetting = { stiffness: 240, tipSoftness: 0.7, rootDamping: 0.75, tipDamping: 0.5 }
 const FREE_SPRING: SpringSetting = { stiffness: 160, tipSoftness: 0.7, rootDamping: 0.6, tipDamping: 0.4 }
 // Hair in a strong wind snaps to the air quickly and whips at the tip, so it can flap.
 const WIND_SPRING: SpringSetting = { stiffness: 620, tipSoftness: 0.4, rootDamping: 0.9, tipDamping: 0.35 }
+// Gelled hair does what the comb tells it: it settles onto the combed line fast and never wobbles.
+const GEL_SPRING: SpringSetting = { stiffness: 2600, tipSoftness: 0.2, rootDamping: 1, tipDamping: 1 }
 const SETTLE_DISTANCE = 0.05
 const SETTLE_SPEED = 0.1
 const NO_OFFSETS: HairOffsets = []
@@ -29,6 +30,10 @@ function springTable(setting: SpringSetting, variation: number): SpringTable {
 function strandVariation(index: number): number {
   return 0.85 + 0.3 * ((index * 37) % 11) / 10
 }
+
+// What is holding a strand: a fingertip pushing it, the wind blowing it or the comb laying it down.
+type Drive = 'finger' | 'wind' | 'gel'
+
 // Motion of one strand as a displacement for each drawn point, on top of its saved style.
 interface MovingStrand {
   position: number[]
@@ -37,22 +42,22 @@ interface MovingStrand {
   // Pose at the moment the finger first grabbed the strand; used to limit how far it is carried.
   origin: number[]
   held: boolean
-  // Held by the blower rather than a fingertip.
-  wind: boolean
+  drive: Drive
   active: boolean
 }
 
 function emptyStrand(): MovingStrand {
   const zeros = () => new Array<number>(HAIR_SHAPE_LENGTH).fill(0)
-  return { position: zeros(), target: zeros(), velocity: zeros(), origin: zeros(), held: false, wind: false, active: false }
+  return { position: zeros(), target: zeros(), velocity: zeros(), origin: zeros(), held: false, drive: 'finger', active: false }
 }
 
 export class HairMotion {
   private strands: MovingStrand[] = Array.from({ length: STRAND_COUNT }, emptyStrand)
   private springs = Array.from({ length: STRAND_COUNT }, (_, index) => ({
-    held: springTable(HELD_SPRING, strandVariation(index)),
     free: springTable(FREE_SPRING, strandVariation(index)),
+    finger: springTable(FINGER_SPRING, strandVariation(index)),
     wind: springTable(WIND_SPRING, strandVariation(index)),
+    gel: springTable(GEL_SPRING, strandVariation(index)),
   }))
 
   offsets(): HairOffsets {
@@ -103,7 +108,17 @@ export class HairMotion {
 
   // Points each strand the wind reaches at the pose the air is blowing it toward. The spring carries the
   // hair there, so a target that keeps changing makes it flap. Strands stay held until released.
-  blow(poses: readonly WindPose[]) {
+  blow(poses: readonly StrandPose[]) {
+    this.hold(poses, 'wind')
+  }
+
+  // Lays each strand the comb has hold of onto its combed pose. Gelled hair follows the line closely and
+  // stops dead on it. Strands stay held until released.
+  comb(poses: readonly StrandPose[]) {
+    this.hold(poses, 'gel')
+  }
+
+  private hold(poses: readonly StrandPose[], drive: Drive) {
     for (const { index, offsets } of poses) {
       const strand = this.strands[index]
       if (!strand || offsets.length !== HAIR_SHAPE_LENGTH || !offsets.every(Number.isFinite)) continue
@@ -112,7 +127,7 @@ export class HairMotion {
         strand.active = true
         strand.origin = strand.position.slice()
       }
-      strand.wind = true
+      strand.drive = drive
       strand.target = offsets.slice()
     }
   }
@@ -135,7 +150,7 @@ export class HairMotion {
     for (const strand of this.strands) {
       if (!strand.held) continue
       strand.held = false
-      strand.wind = false
+      strand.drive = 'finger'
       strand.target.fill(0)
       strand.origin.fill(0)
     }
@@ -151,7 +166,7 @@ export class HairMotion {
       const strand = this.strands[index]
       if (!strand.active) continue
       const tables = this.springs[index]
-      const spring = strand.wind ? tables.wind : strand.held ? tables.held : tables.free
+      const spring = strand.held ? tables[strand.drive] : tables.free
       let settled = true
       for (let slot = 0; slot < HAIR_SHAPE_LENGTH; slot++) {
         if (reducedMotion) {
