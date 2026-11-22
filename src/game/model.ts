@@ -17,6 +17,7 @@ export type Accessory = typeof ACCESSORIES[number]
 export const OUTFITS = [
   'cozy', 'hero', 'sweater', 'overalls', 'princess', 'tutu', 'hoodie', 'raincoat', 'party',
   'tee', 'garland', 'wizard', 'sailor', 'apron', 'pajamas', 'poncho', 'tuxedo', 'fairy',
+  'sundress', 'mermaid', 'kimono', 'strawberry', 'unicorn', 'frost', 'butterfly', 'cupcake', 'heart', 'daisy',
 ] as const
 export type Outfit = typeof OUTFITS[number]
 export const DEFAULT_OUTFIT: Outfit = 'cozy'

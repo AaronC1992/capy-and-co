@@ -18,7 +18,7 @@ The fantasy RPG/VR project was cancelled before implementation. The current deli
 - Faster hold-to-grow (0.5 length per second) and cutting to a bare scalp, which Grow can bring back.
 - Thick persistent lather that follows styled hair, rinses locally, and appears in saved/exported pictures.
 - Continuous position-based scissors and localized hold-to-grow, including repeated edits within one undoable touch.
-- 18 outfits in the Dress up tab (saved per friend, shown in saved pictures, and undoable), plus five accessories and removal.
+- 28 outfits in the Dress up tab (saved per friend, shown in saved pictures, and undoable), plus five accessories and removal.
 - Whole-head styling, gesture-level undo, undoable reset.
 - Responsive desktop, tablet, and phone layouts.
 - Keyboard controls, visible focus, modal focus containment, reduced motion.
@@ -41,7 +41,7 @@ Executed during implementation:
 | Vite production build | Passed |
 | Local server HTTP response | 200 |
 
-Tests cover real model transitions rather than just UI labels: single-lock editing, length bounds, curl/brush behavior, color/wash behavior, multi-lock stroke undo, friend isolation, accessory/reset undo, bounded history, whole-head edits, geometry picking, fast strokes, malformed saves, inaccessible storage, snapshots, and gallery eviction. Later milestones added tests for the local brush, the blow-dryer, the gel comb, the water sprayer, hold-to-curl, cutting to bald and regrowing, and the 18 outfits; each milestone section below lists what it covers.
+Tests cover real model transitions rather than just UI labels: single-lock editing, length bounds, curl/brush behavior, color/wash behavior, multi-lock stroke undo, friend isolation, accessory/reset undo, bounded history, whole-head edits, geometry picking, fast strokes, malformed saves, inaccessible storage, snapshots, and gallery eviction. Later milestones added tests for the local brush, the blow-dryer, the gel comb, the water sprayer, hold-to-curl, cutting to bald and regrowing, and the 28 outfits; each milestone section below lists what it covers.
 
 ### Continuous-touch refinement
 
@@ -281,6 +281,8 @@ Verification:
 
 Feedback: add at least 15 different clothes to change into in the Dress up tab.
 
+This section describes the first 18 outfits, and its tile counts are from before ten more were added (see "Ten more girly outfits" below).
+
 Change:
 
 - 18 outfits (`OUTFITS` in `model.ts`, one table of art in `Outfit.tsx`): Cozy cape, Super capy, Snuggly sweater, Overalls, Princess gown, Twirly tutu, Comfy hoodie, Rainy day coat, Party dress, Star tee, Flower lei, Wizard robe, Sailor top, Chef apron, Sleepy PJs, Rainbow poncho, Fancy suit, and Fairy wings. The Cozy cape is the original look and the default.
@@ -295,6 +297,26 @@ Verification:
 - On an earlier near-final build (not re-measured on the final one): the gallery shows outfits, the exported SVG carries the outfit art, and the tiles lay out in 3 columns at 800 and 390 pixels. The real Download button was not exercised headless.
 - Frame rate with an outfit on: see the final-build checks below.
 - Not verified: how comfortable the tiles are to tap on a real tablet.
+
+### Ten more girly outfits
+
+Feedback: add 10 more girly clothes to the Dress up tab.
+
+Change:
+
+- Ten new outfits, 28 in all, added to `OUTFITS` (`model.ts`) and to the same table of art (`ART` in `Outfit.tsx`): Sunny sundress (yellow gingham skirt, coral straps, sash, and bow), Mermaid shimmer (shell top and a shimmering scaled tail fin), Blossom kimono (cream robe, rose obi sash, and blossom sleeves), Strawberry dress (a berry-shaped dress with seeds and a leafy collar), Unicorn dress (rainbow bib, three tiers of lilac tulle, and a horn badge on a gold belt), Snow queen cape (an icy cape with white fur trim and snowflakes), Butterfly dress (a lilac dress with butterfly wings behind the shoulders), Cupcake dress (a frosted top over a cupcake-wrapper skirt, with sprinkles and a cherry), Sweetheart dress (a heart on the bodice and a heart-trimmed hem), and Daisy dress (a periwinkle dress with a daisy-chain collar and daisies on the skirt).
+- The same rules as the first 18: two layers (one behind the paws, one in front), plain SVG attributes only, and any gradient or pattern declared inside that outfit's own layer with an id that is unique to the instance. They are saved per friend, appear in the gallery and in exported PNGs, and can be undone. Older saves still load, and the Cozy cape stays the default.
+- The picker grid has three columns, so 28 outfits leave one tile (Daisy dress) alone on the last row. A small CSS rule centers a lone last tile.
+
+Verification:
+
+- Typecheck, the production build, and the 250 existing tests pass (exit code 0). The outfit tests loop over every id in `OUTFITS`, so they already cover all 28: distinct art on every friend, unique and defined gradient ids, an icon and a name for each, one picker tile each, select, undo, and reset, and unknown ids rejected. No test hard-codes the number of outfits.
+- A temporary contact sheet (since deleted) drew all ten outfits on all three friends so that each could be inspected.
+- Chromium mouse (the Vite dev server and the production build): the Dress up tab showed 28 outfit tiles and 6 accessory tiles, with exactly one tile pressed in each group. At 390 and 800 pixels wide all 28 tiles were visible and legible (longer names such as "Mermaid shimmer" wrap to two lines), and the lone Daisy tile was centered at 390, 800, 876, and 1440 pixels. Unicorn dress and, separately, Daisy dress were still the single worn outfit after a reload, with no page or console errors.
+- PNG export, checked for four of the ten (Sunny sundress, Mermaid shimmer, Unicorn dress, and Daisy dress): each was saved and exported through the gallery's Download button, and each blob was a valid 800 x 1000 PNG. The four differed from one another, and cropped views of them showed the gingham, the fin gradient, the rainbow bib and tulle, and the daisies all drawn. The other six use the same drawing path.
+- Frame rate while blowing, with the Dress up tab open (production build, headless Chromium with software rendering, an 876 x 720 viewport, one 2-second dryer sweep over the hair per outfit): the ten new outfits ran at 34.3 to 38.3 fps, and the Cozy cape, Fairy wings, and Rainbow poncho at 36.2 to 38.7 fps, so none was clearly more expensive. This viewport differs from the earlier sweeps, so compare those numbers with each other and not with the ones below.
+- The final-build sweep below predates these outfits and covered the first 18.
+- Not verified: a real tablet, how comfortable the tiles are to tap, and the browser's real download event (the embedded browser does not emit one, so the exported Blob was inspected instead).
 
 ### Final-build sweep, reload checks, and frame rate
 
@@ -351,7 +373,7 @@ Use a current Chrome/Edge desktop browser, Android Chrome, and iPad/iPhone Safar
 - [ ] A second finger does not trigger an extra styling gesture.
 - [ ] Lift a finger outside the character; the next gesture still works.
 - [ ] Scroll outside the character, rotate the device, and keep playing.
-- [ ] Open Dress up and tap through all 18 outfits: exactly one is highlighted at a time and the capybara wears it. Save a picture and download a PNG while wearing an outfit and confirm both show it. Undo steps back one outfit at a time, Reset returns the cozy cape, and each friend keeps her own outfit.
+- [ ] Open Dress up and tap through all 28 outfits: exactly one is highlighted at a time and the capybara wears it. Save a picture and download a PNG while wearing an outfit and confirm both show it. Undo steps back one outfit at a time, Reset returns the cozy cape, and each friend keeps her own outfit.
 - [ ] Apply accessories and reset; undo both operations.
 - [ ] Save a picture, close/reopen the browser, and find it in My gallery.
 - [ ] Download a PNG and open it from the device's Files/Downloads app.
@@ -368,6 +390,7 @@ Limitations of the newest features:
 
 - A whole head of full curls under the blow-dryer is the slowest thing the game draws: about 12 to 15 fps against about 34 for straight hair, in headless desktop Chromium with software rendering. A curled strand is drawn through 73 points against 13 to 25 for a straight one. Brush, Comb, and Wash straighten hair, so the slowdown goes away once the curls are styled out. A real tablet has not been tested. If a tablet stutters, the first thing to try is lowering `CURL_DENSITY`, or drawing curly strands with fewer points while the dryer is running.
 - Outfits and accessories have fixed placements; they do not adapt to the hair or to movement.
+- The small picker tile's frame trims a few units off the Butterfly dress's wing tips. The capybara and saved pictures show the full wings.
 - Drying sprayed hair lowers its wetness but does not make it fluff back up by itself: it stays hanging until it is brushed, combed, or blown into a new shape.
 - Water rinses a strand as soon as the mist reaches it: the soap comes off, the dye returns to the friend's natural color, and curls straighten (the same as Wash always has); the haircut stays. Spray before coloring or curling, not after.
 - Cutting to the scalp clears the strand's brushed pose, curl, soap, and water (the color is kept), so Grow brings it back in the same color but without the old style.

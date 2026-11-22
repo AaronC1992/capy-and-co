@@ -13,7 +13,7 @@
 
 A happy little capybara hair studio for desktop, phone, and tablet browsers.
 
-Choose Mochi, Biscuit, or Cocoa, then brush, comb, snip, regrow, curl, soap, spray, blow-dry, and color their hair. Play with 65 fine, independently editable strands, pick one of 18 outfits and an accessory, and save a makeover picture. There are no scores, timers, advertisements, accounts, purchases, or analytics.
+Choose Mochi, Biscuit, or Cocoa, then brush, comb, snip, regrow, curl, soap, spray, blow-dry, and color their hair. Play with 65 fine, independently editable strands, pick one of 28 outfits and an accessory, and save a makeover picture. There are no scores, timers, advertisements, accounts, purchases, or analytics.
 
 This is an original 2D game inspired by the open-ended animal-salon genre. It does not use Pony Style Box artwork, code, characters, or branding. The earlier fantasy RPG/VR direction has been replaced.
 
@@ -67,7 +67,7 @@ Pages must be set to **Settings → Pages → Source: GitHub Actions**. Saved pi
 - **Wash:** a water sprayer. A spray bottle follows your finger and mists the hair around it. You watch the water soak in (a darker sheen and droplets) and the heavy wet hair slides down and hangs straight, lying over the head instead of sinking into the face. Soap, dye, and curls rinse out of whatever the mist reaches, and the friend's original hair color returns. Wet hair stays hanging until you brush, comb, or blow-dry it, and the haircut is kept. Use "Do all the hair" to soak everything.
 - **Blow-dry:** hold the dryer near the hair and swipe the way you want the air to go. A visible stream of air blows every strand inside it: the hair streams out in that direction from the root, flaps along its length while the air is on it, and dries as it goes. Hair behind or beside the stream is left alone, and hair the air hits head-on folds outward. Swing the dryer around to blow different patches in different directions. The blown shape stays when you let go, including after reloading. It does not remove soap. "Do all the hair" dries and fluffs the whole head.
 - **Color:** choose one of eight colors, then paint the locks.
-- **Dress up:** pick one of 18 outfits (Cozy cape, Super capy, Snuggly sweater, Overalls, Princess gown, Twirly tutu, Comfy hoodie, Rainy day coat, Party dress, Star tee, Flower lei, Wizard robe, Sailor top, Chef apron, Sleepy PJs, Rainbow poncho, Fancy suit, or Fairy wings), then add a bow, daisy, crown, cherries, or star. Each friend keeps their own outfit, and it shows up in saved pictures.
+- **Dress up:** pick one of 28 outfits (Cozy cape, Super capy, Snuggly sweater, Overalls, Princess gown, Twirly tutu, Comfy hoodie, Rainy day coat, Party dress, Star tee, Flower lei, Wizard robe, Sailor top, Chef apron, Sleepy PJs, Rainbow poncho, Fancy suit, Fairy wings, Sunny sundress, Mermaid shimmer, Blossom kimono, Strawberry dress, Unicorn dress, Snow queen cape, Butterfly dress, Cupcake dress, Sweetheart dress, or Daisy dress), then add a bow, daisy, crown, cherries, or star. Each friend keeps their own outfit, and it shows up in saved pictures.
 - **Do all the hair:** apply the selected hair tool to every lock.
 - **Undo:** revert an entire stroke or an outfit, accessory, or reset change. Reset is also undoable and puts the friend back in the cozy cape.
 - **Picture perfect!:** snapshot the current look in My gallery.
@@ -100,7 +100,7 @@ src/
   styles.css               Responsive interface and reduced-motion support
   components/
     Capybara.tsx           Original scalable character, outfits, and accessories
-    Outfit.tsx             Original flat-pastel art for the 18 outfits, drawn around the paws
+    Outfit.tsx             Original flat-pastel art for the 28 outfits, drawn around the paws
     SalonRoom.tsx          Original illustrated salon background
     Studio.tsx             Mouse/touch/pen strokes and keyboard interaction
     useHairMotion.ts       Frame-scheduled animation and reduced-motion handling
@@ -146,7 +146,7 @@ npm test
 npm run build
 ```
 
-250 automated tests in 15 files cover initialization, rendering, fine-strand editing, the head-curve hairline and scalp cover, the local per-point brush (locality, fixed roots, no stretching, sideways folding, tip lag and swing, bounded slip, frame-rate independence, saved poses), the gel comb (holding, laying hair along the traced line, the untouched hair before the touch, curls and bald scalp), the directional blow-dryer (swipe aiming, the wind cone and its edges, per-segment bending that keeps strand lengths, head-on folding, flapping, linear drying, frame-rate independence, stall handling, saved poses), the water sprayer and hanging wet hair (where the mist lands, soaking, rinsing, shaved scalp, hanging with fixed roots and unchanged lengths, staying out of the face, throttled pose updates that still settle exactly), hold-to-curl timing (including frame-rate independence), efficient strand painting, soap/rinsing, wetness, position-based cutting (including brushed and bent hair and cutting to bald), hold-to-grow and regrowing a bare scalp, the 18 outfits (art, selection, per-friend looks, undo/reset), gesture undo, character isolation, deformed-hair picking, older-save migration, shape and outfit validation, storage failure handling, and gallery snapshots.
+250 automated tests in 15 files cover initialization, rendering, fine-strand editing, the head-curve hairline and scalp cover, the local per-point brush (locality, fixed roots, no stretching, sideways folding, tip lag and swing, bounded slip, frame-rate independence, saved poses), the gel comb (holding, laying hair along the traced line, the untouched hair before the touch, curls and bald scalp), the directional blow-dryer (swipe aiming, the wind cone and its edges, per-segment bending that keeps strand lengths, head-on folding, flapping, linear drying, frame-rate independence, stall handling, saved poses), the water sprayer and hanging wet hair (where the mist lands, soaking, rinsing, shaved scalp, hanging with fixed roots and unchanged lengths, staying out of the face, throttled pose updates that still settle exactly), hold-to-curl timing (including frame-rate independence), efficient strand painting, soap/rinsing, wetness, position-based cutting (including brushed and bent hair and cutting to bald), hold-to-grow and regrowing a bare scalp, the 28 outfits (art, selection, per-friend looks, undo/reset), gesture undo, character isolation, deformed-hair picking, older-save migration, shape and outfit validation, storage failure handling, and gallery snapshots.
 
 Browser verification and the real-device checklist are recorded in [Development status](docs/DEVELOPMENT_STATUS.md). See [Architecture](docs/ARCHITECTURE.md) for the interaction and persistence design.
 

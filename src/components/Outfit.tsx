@@ -21,6 +21,16 @@ export const OUTFIT_LABELS: Record<Outfit, string> = {
   poncho: 'Rainbow poncho',
   tuxedo: 'Fancy suit',
   fairy: 'Fairy wings',
+  sundress: 'Sunny sundress',
+  mermaid: 'Mermaid shimmer',
+  kimono: 'Blossom kimono',
+  strawberry: 'Strawberry dress',
+  unicorn: 'Unicorn dress',
+  frost: 'Snow queen cape',
+  butterfly: 'Butterfly dress',
+  cupcake: 'Cupcake dress',
+  heart: 'Sweetheart dress',
+  daisy: 'Daisy dress',
 }
 
 interface ArtProps {
@@ -104,6 +114,39 @@ const PONCHO_FRINGE = Array.from({ length: 21 }, (_, step) => {
 const LEAF = 'M250 398C224 412 224 440 250 456C276 440 276 412 250 398Z'
 const LEAVES = [{ angle: -75, color: '#8cc276' }, { angle: 75, color: '#8cc276' }, { angle: -50, color: '#a9d392' }, { angle: 50, color: '#a9d392' }, { angle: -25, color: '#c2e0a6' }, { angle: 25, color: '#c2e0a6' }, { angle: 0, color: '#b4da9a' }]
 
+// Small shapes are drawn as zero-length strokes with round caps, so a whole scatter of them costs a single path.
+const dots = (list: number[][]) => list.map(([x, y]) => `M${x} ${y}h.1`).join('')
+
+// Round petals around each flower [x, y, reach], to be drawn as dots.
+function petals(list: number[][], count = 5) {
+  return list.map(([cx, cy, reach]) => Array.from({ length: count }, (_, petal) => {
+    const angle = (petal * 2 * Math.PI) / count - Math.PI / 2
+    return `M${round1(cx + reach * Math.cos(angle))} ${round1(cy + reach * Math.sin(angle))}h.1`
+  }).join('')).join('')
+}
+
+// Hearts [x, y, width], each point down and centered on its position.
+function hearts(list: number[][]) {
+  return list.map(([cx, cy, width]) => {
+    const at = (x: number, y: number) => `${round1(cx + x * width)} ${round1(cy + y * width)}`
+    return `M${at(0, 0.45)}C${at(-0.55, 0.05)} ${at(-0.55, -0.4)} ${at(-0.27, -0.4)}C${at(-0.1, -0.4)} ${at(0, -0.28)} ${at(0, -0.2)}C${at(0, -0.28)} ${at(0.1, -0.4)} ${at(0.27, -0.4)}C${at(0.55, -0.4)} ${at(0.55, 0.05)} ${at(0, 0.45)}Z`
+  }).join('')
+}
+
+// Six-armed snowflakes [x, y, reach]: three strokes crossing at the middle.
+function snowflakes(list: number[][]) {
+  return list.map(([cx, cy, reach]) => [0, 60, 120].map((degrees) => {
+    const dx = round1(reach * Math.cos((degrees * Math.PI) / 180))
+    const dy = round1(reach * Math.sin((degrees * Math.PI) / 180))
+    return `M${round1(cx - dx)} ${round1(cy - dy)}L${round1(cx + dx)} ${round1(cy + dy)}`
+  }).join('')).join('')
+}
+
+// A band of cloth with a scalloped hem, from x across `count` scallops of `width`.
+const flounce = (x: number, top: number, bottom: number, count: number, width: number, depth: number) => `M${x} ${top}V${bottom}${scallops(count, width, depth)}V${top}Z`
+
+const RAINBOW = ['#f4a3a8', '#f6bf8a', '#f5e08a', '#a9d49a', '#8fc4e3']
+
 function Torso({ fill, stroke }: { fill: string; stroke: string }) {
   return <rect x="149" y="305" width="202" height="140" rx="42" fill={fill} stroke={stroke} strokeWidth="3" />
 }
@@ -131,6 +174,89 @@ const WING = <>
   <path d="M156 380C126 382 94 404 98 430 102 452 140 444 160 410 164 398 162 388 156 380Z" fill="#e3f4f6" fillOpacity=".92" stroke="#8cc3cf" strokeWidth="2.5" strokeLinejoin="round" />
   <path d="M154 354C126 336 100 312 84 302M150 380C122 384 106 398 104 422" fill="none" stroke="#8cc3cf" strokeWidth="2" strokeLinecap="round" opacity=".7" />
 </>
+
+// Round-petalled flowers [x, y, reach]: an edge ring, the petals, then the middle.
+function flowers(list: number[][], petal: string, edge: string, middle: string, count = 5, core = 4.5) {
+  const ring = petals(list, count)
+  return <>
+    <path d={ring} fill="none" stroke={edge} strokeWidth="9.5" strokeLinecap="round" />
+    <path d={ring} fill="none" stroke={petal} strokeWidth="6.5" strokeLinecap="round" />
+    <path d={dots(list)} fill="none" stroke={middle} strokeWidth={core} strokeLinecap="round" />
+  </>
+}
+
+// Fluffy white fur: a row of round tufts along a curve, over a slightly bigger soft outline.
+const furTrim = (d: string) => <>
+  <path d={d} fill="none" stroke="#a9c4d9" strokeWidth="19" strokeDasharray="0.1 11" strokeLinecap="round" />
+  <path d={d} fill="none" stroke="#fff" strokeWidth="14" strokeDasharray="0.1 11" strokeLinecap="round" />
+</>
+
+const SUNDRESS_BOW = <>
+  <path d="M285 412 273 442 287 435ZM291 412 303 442 289 435Z" fill="#f29a86" stroke="#c96f5f" strokeWidth="2.5" strokeLinejoin="round" />
+  <path d="M288 408C272 392 258 398 262 410 266 424 282 420 288 408ZM288 408C304 392 318 398 314 410 310 424 294 420 288 408Z" fill="#f6ad9b" stroke="#c96f5f" strokeWidth="2.5" strokeLinejoin="round" />
+  <circle cx="288" cy="408" r="5" fill="#f29a86" stroke="#c96f5f" strokeWidth="2.5" />
+</>
+
+// Hips, a narrow knee, then a two-lobed fin that spreads over the feet.
+const MERMAID_TAIL = 'M151 404H349C349 420 340 428 332 432C356 438 380 446 388 460C340 478 280 470 250 452C220 470 160 478 112 460C120 446 144 438 168 432C160 428 151 420 151 404Z'
+const MERMAID_RAYS = <path d="M172 441Q148 447 124 457M184 451Q154 459 130 464M198 459Q172 467 152 465" fill="none" stroke="#fff" strokeOpacity=".6" strokeWidth="2" strokeLinecap="round" />
+const shell = (x: number) => <>
+  <path d={`M${x - 17} 392A17 17 0 0 1 ${x + 17} 392Z`} fill="#f6b3d0" stroke="#c9789f" strokeWidth="2.5" strokeLinejoin="round" />
+  <path d={`M${x} 392V378M${x} 392 ${x - 9} 381M${x} 392 ${x + 9} 381`} fill="none" stroke="#c9789f" strokeWidth="2" strokeLinecap="round" />
+</>
+
+// The left sleeve; the right one is the same drawing mirrored.
+const KIMONO_SLEEVE_SHAPE = 'M126 360Q126 348 138 348H174Q186 348 186 360V438Q186 448 176 448H136Q126 448 126 438Z'
+const KIMONO_SLEEVE = <>
+  <path d={KIMONO_SLEEVE_SHAPE} fill="#f9dbe4" />
+  <path d="M127.5 436H184.5V438Q184.5 446.5 176 446.5H136Q127.5 446.5 127.5 438Z" fill="#f4a3b8" />
+  {flowers([[154, 376, 4.5], [168, 402, 4.5], [148, 418, 4.5]], '#fffaf0', '#e98aa8', '#f6d66f')}
+  <path d={KIMONO_SLEEVE_SHAPE} fill="none" stroke="#d99bb0" strokeWidth="3" strokeLinejoin="round" />
+</>
+
+const BERRY = 'M147 352H353C360 404 322 450 250 458C178 450 140 404 147 352Z'
+const SEEDS = [[200, 406], [232, 407], [268, 407], [300, 406], [186, 419], [216, 420], [250, 420], [284, 420], [314, 419], [200, 432], [232, 433], [268, 433], [300, 432], [232, 445], [268, 445]].map(([x, y]) => `M${x} ${y}v2.5`).join('')
+const CALYX_LEAF = 'M250 364C240 372 240 392 250 402C260 392 260 372 250 364Z'
+const CALYX_ANGLES = [-72, -36, 0, 36, 72]
+
+// A cape panel hanging from the left shoulder, trimmed with fur; the right one is mirrored.
+const frostPanel = (id: string) => <>
+  <path d="M178 340C140 362 116 408 112 454Q150 468 190 454L202 366Z" fill={`url(#${id}-ice)`} stroke="#79a9cf" strokeWidth="3" strokeLinejoin="round" />
+  <path d={snowflakes([[140, 392, 7], [162, 426, 6], [132, 436, 5]])} fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" />
+  {furTrim('M202 366 190 454')}
+  {furTrim('M112 454Q150 468 190 454')}
+</>
+
+// Both wings on the left side, the lower one first so the upper wing overlaps it; the right side is mirrored.
+const butterflyWings = (id: string) => <>
+  <path d="M156 384C132 380 96 390 90 416 86 440 118 456 140 432 152 420 160 400 156 384Z" fill={`url(#${id}-wing)`} stroke="#8a5aa8" strokeWidth="3" strokeLinejoin="round" />
+  <path d="M158 356C140 316 108 296 84 308 64 320 70 360 96 378 116 392 144 388 158 372Z" fill={`url(#${id}-wing)`} stroke="#8a5aa8" strokeWidth="3" strokeLinejoin="round" />
+  <path d="M154 362Q124 342 92 318M152 378Q118 376 94 372M154 396Q126 400 102 420" fill="none" stroke="#8a5aa8" strokeOpacity=".5" strokeWidth="2" strokeLinecap="round" />
+  <path d={dots([[98, 336], [112, 354]])} fill="none" stroke="#fff" strokeOpacity=".85" strokeWidth="10" strokeLinecap="round" />
+  <path d={dots([[100, 360], [116, 420], [128, 404]])} fill="none" stroke="#fff" strokeOpacity=".85" strokeWidth="6" strokeLinecap="round" />
+</>
+const MINI_BUTTERFLIES = [{ x: 198, y: 424, color: '#f9b95c' }, { x: 250, y: 432, color: '#f58ab4' }, { x: 302, y: 424, color: '#f9b95c' }]
+
+// Pleat lines of the cupcake wrapper, from the waist out to the wider hem.
+const CUPCAKE_PLEATS = Array.from({ length: 7 }, (_, step) => {
+  const top = 173.5 + step * 25.5
+  return `M${top} 404L${round1(250 + (top - 250) * 1.184)} 452`
+}).join('')
+const SPRINKLES = [
+  { color: '#ffffff', d: 'M190 391l4-2M218 400l4 2M296 381l4-2M308 396l3 3' },
+  { color: '#8fc4e3', d: 'M206 382l3 3M230 396l4-2M274 402l4 1M300 404l3-3' },
+  { color: '#f5e08a', d: 'M198 400l4-2M222 384l4 2M280 384l3 3M312 388l-1 4' },
+  { color: '#a9d49a', d: 'M210 394l3-3M236 380l4-1M268 394l4 1M292 392l3 3' },
+]
+
+const HEM_HEARTS = Array.from({ length: 10 }, (_, step) => 136 + step * (228 / 9))
+
+// Two on the bodice, a chain along the waist, then four scattered on the skirt.
+const DAISIES = [
+  [206, 397, 6], [294, 397, 6],
+  ...Array.from({ length: 9 }, (_, step) => [170 + step * 20, 412, 6]),
+  [192, 432, 6], [226, 440, 6], [274, 440, 6], [308, 432, 6],
+]
 
 const ART: Record<Outfit, { back: Layer; front: Layer }> = {
   cozy: {
@@ -338,6 +464,174 @@ const ART: Record<Outfit, { back: Layer; front: Layer }> = {
     front: ({ fur }) => <>
       {LEAVES.map(({ angle, color }) => <path key={angle} d={LEAF} transform={`rotate(${angle} 250 398)`} fill={color} stroke="#6a9a58" strokeWidth="2.5" strokeLinejoin="round" />)}
       <Arms fur={fur} />
+    </>,
+  },
+  sundress: {
+    back: ({ fur, light }) => <>
+      <Torso fill={fur} stroke={FUR_LINE} />
+      <ellipse cx="250" cy="388" rx="46" ry="24" fill={light} opacity=".55" />
+    </>,
+    front: ({ id, fur }) => <>
+      <defs>
+        <pattern id={`${id}-check`} width="24" height="24" patternUnits="userSpaceOnUse">
+          <rect width="24" height="24" fill="#f8d974" />
+          <rect width="12" height="24" fill="#fff7d6" fillOpacity=".6" />
+          <rect width="24" height="12" fill="#fff7d6" fillOpacity=".6" />
+        </pattern>
+      </defs>
+      <path d="M204 394 196 352M296 394 304 352" fill="none" stroke="#c96f5f" strokeWidth="16" strokeLinecap="round" />
+      <path d="M204 394 196 352M296 394 304 352" fill="none" stroke="#f29a86" strokeWidth="10" strokeLinecap="round" />
+      <path d="M164 388Q250 408 336 388V416H164Z" fill={`url(#${id}-check)`} stroke="#d8b24a" strokeWidth="3" strokeLinejoin="round" />
+      <path d="M164 388Q250 408 336 388" fill="none" stroke="#f29a86" strokeWidth="5" strokeLinecap="round" />
+      <path d="M152 412H348L376 448Q250 466 124 448Z" fill={`url(#${id}-check)`} stroke="#d8b24a" strokeWidth="3" strokeLinejoin="round" />
+      <path d="M124 448Q250 466 376 448" fill="none" stroke="#f29a86" strokeWidth="6" strokeLinecap="round" />
+      <path d="M152 400H348V416H152Z" fill="#f29a86" stroke="#c96f5f" strokeWidth="3" strokeLinejoin="round" />
+      {SUNDRESS_BOW}
+      <Arms fur={fur} />
+    </>,
+  },
+  mermaid: {
+    back: ({ fur, light }) => <>
+      <Torso fill={fur} stroke={FUR_LINE} />
+      <ellipse cx="250" cy="392" rx="48" ry="24" fill={light} opacity=".55" />
+    </>,
+    front: ({ id, fur }) => <>
+      <defs>
+        <linearGradient id={`${id}-fin`} x1="0" y1="0" x2="0" y2="1">
+          <stop stopColor="#7fdcd4" /><stop offset=".55" stopColor="#82b4ee" /><stop offset="1" stopColor="#b79af2" />
+        </linearGradient>
+      </defs>
+      <path d={MERMAID_TAIL} fill={`url(#${id}-fin)`} stroke="#5b86c2" strokeWidth="3" strokeLinejoin="round" />
+      <path d={`M160 410${scallops(9, 20, 9)}M170 419${scallops(8, 20, 9)}M180 428${scallops(7, 20, 9)}`} fill="none" stroke="#fff" strokeOpacity=".55" strokeWidth="2" strokeLinecap="round" />
+      {MERMAID_RAYS}
+      <g transform="matrix(-1 0 0 1 500 0)">{MERMAID_RAYS}</g>
+      <path d={stars([[134, 452, 4.5, 2], [366, 452, 4.5, 2], [250, 438, 5, 2.2]])} fill="#fff" fillOpacity=".9" />
+      <path d="M203 380 198 360M297 380 302 360" fill="none" stroke="#c9789f" strokeWidth="2" strokeLinecap="round" />
+      {shell(213)}
+      {shell(287)}
+      <Arms fur={fur} />
+    </>,
+  },
+  kimono: {
+    back: () => <>
+      <Torso fill="#fbf0e3" stroke="#d9c4aa" />
+      <path d="M200 358 250 400 300 358" fill="none" stroke="#d9a3b3" strokeWidth="14" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M200 358 250 400 300 358" fill="none" stroke="#f7d3dc" strokeWidth="9" strokeLinecap="round" strokeLinejoin="round" />
+    </>,
+    front: () => <>
+      <path d="M147 426H353L363 452Q250 464 137 452Z" fill="#fbf0e3" stroke="#d9c4aa" strokeWidth="3" strokeLinejoin="round" />
+      <path d="M141 447Q250 459 359 447" fill="none" stroke="#f4a3b8" strokeWidth="7" />
+      {flowers([[200, 436, 4.5], [225, 440, 4.5], [250, 436, 4.5], [275, 440, 4.5], [300, 436, 4.5]], '#f6adc0', '#e0809f', '#f6d66f')}
+      <rect x="149" y="392" width="202" height="34" rx="6" fill="#e0708f" stroke="#b94d6d" strokeWidth="3" />
+      <path d="M154 401H346M154 417H346" stroke="#f4a3b8" strokeWidth="2.5" />
+      <path d="M156 409H344" stroke="#f6d66f" strokeWidth="3.5" strokeDasharray="0.1 9" strokeLinecap="round" />
+      <circle cx="250" cy="409" r="8" fill="#f6d66f" stroke="#c9a547" strokeWidth="2.5" />
+      <circle cx="250" cy="409" r="3" fill="#e0708f" />
+      <g>{KIMONO_SLEEVE}</g>
+      <g transform="matrix(-1 0 0 1 500 0)">{KIMONO_SLEEVE}</g>
+    </>,
+  },
+  strawberry: {
+    back: ({ fur }) => <>
+      <Torso fill={fur} stroke={FUR_LINE} />
+      <path d={BERRY} fill="#ee6a7b" stroke="#c4485b" strokeWidth="3" strokeLinejoin="round" />
+      <path d="M188 386Q180 412 196 436" fill="none" stroke="#f9a0ac" strokeWidth="5" strokeLinecap="round" />
+      <path d={SEEDS} fill="none" stroke="#fff2cc" strokeWidth="3.6" strokeLinecap="round" />
+      {CALYX_ANGLES.map((angle) => <path key={angle} d={CALYX_LEAF} transform={`rotate(${angle} 250 364)`} fill="#7fb86a" stroke="#4f8f45" strokeWidth="2.5" strokeLinejoin="round" />)}
+    </>,
+    front: ({ fur }) => <Arms fur={fur} tone="#ee6a7b" line="#c4485b" reach={392} cuff="#fff2cc" />,
+  },
+  unicorn: {
+    back: () => <>
+      <Torso fill="#f6f1fd" stroke="#cdbfe3" />
+      {RAINBOW.map((color, row) => <path key={color} d={`M184 358Q250 ${2 * (402 - row * 7) - 358} 316 358`} fill="none" stroke={color} strokeWidth="6.5" />)}
+    </>,
+    front: ({ fur }) => <>
+      <path d={`M160 412 124 446${scallops(9, 28, 10)}L340 412Z`} fill="#cdb8ee" stroke="#a98fd4" strokeWidth="3" strokeLinejoin="round" />
+      <path d={`M166 412 138 435${scallops(8, 28, 10)}L334 412Z`} fill="#dccbf4" stroke="#a98fd4" strokeWidth="3" strokeLinejoin="round" />
+      <path d={`M174 412 152 424${scallops(7, 28, 9)}L326 412Z`} fill="#eadffa" stroke="#a98fd4" strokeWidth="3" strokeLinejoin="round" />
+      <path d={stars([[204, 424, 4.5, 2], [296, 424, 4.5, 2], [250, 432, 4.5, 2], [160, 440, 5, 2.2], [340, 440, 5, 2.2], [210, 447, 5, 2.2], [290, 447, 5, 2.2]])} fill="#f6d66f" />
+      <path d="M149 406H351V418H149Z" fill="#f6d66f" stroke="#c9a547" strokeWidth="3" strokeLinejoin="round" />
+      <circle cx="250" cy="412" r="11" fill="#fff" stroke="#c9a547" strokeWidth="2.5" />
+      <path d="M250 400 256 416H244Z" fill="#f6d66f" stroke="#c9a547" strokeWidth="2" strokeLinejoin="round" />
+      <Arms fur={fur} tone="#f6f1fd" line="#cdbfe3" reach={392} cuff="#f3b9cf" />
+    </>,
+  },
+  frost: {
+    back: () => <Torso fill="#e4f2fb" stroke="#a9c9e0" />,
+    front: ({ id }) => <>
+      <defs>
+        <linearGradient id={`${id}-ice`} x1="0" y1="0" x2="0.6" y2="1"><stop stopColor="#cdeaf8" /><stop offset="1" stopColor="#8fc1e3" /></linearGradient>
+      </defs>
+      <path d="M170 414H330L352 452Q250 468 148 452Z" fill="#e4f2fb" stroke="#a9c9e0" strokeWidth="3" strokeLinejoin="round" />
+      <path d="M149 402H351V414H149Z" fill="#c9d8e8" stroke="#9fb8d0" strokeWidth="3" strokeLinejoin="round" />
+      <circle cx="250" cy="408" r="10" fill="#fff" stroke="#8fb5d3" strokeWidth="2.5" />
+      <path d={snowflakes([[250, 408, 6]])} fill="none" stroke="#8fb5d3" strokeWidth="1.8" strokeLinecap="round" />
+      <g>{frostPanel(id)}</g>
+      <g transform="matrix(-1 0 0 1 500 0)">{frostPanel(id)}</g>
+      {furTrim('M186 352Q250 398 314 352')}
+    </>,
+  },
+  butterfly: {
+    back: ({ id }) => <>
+      <defs>
+        <linearGradient id={`${id}-wing`} x1="0" y1="0" x2="1" y2="1"><stop stopColor="#f9b95c" /><stop offset="1" stopColor="#f58ab4" /></linearGradient>
+      </defs>
+      <g>{butterflyWings(id)}</g>
+      <g transform="matrix(-1 0 0 1 500 0)">{butterflyWings(id)}</g>
+      <Torso fill="#cdb8ee" stroke="#9f86cc" />
+      <path d="M204 354q46 44 92 0" fill="none" stroke="#9f86cc" strokeWidth="9" strokeLinecap="round" />
+      <path d="M204 354q46 44 92 0" fill="none" stroke="#efe6fb" strokeWidth="5" strokeLinecap="round" />
+    </>,
+    front: ({ fur }) => <>
+      <path d={`M162 406 133 438${scallops(9, 26, 10)}L338 406Z`} fill="#e6daf8" stroke="#9f86cc" strokeWidth="3" strokeLinejoin="round" />
+      {MINI_BUTTERFLIES.map(({ x, y, color }) => <g key={x} fill="none" strokeLinecap="round">
+        <path d={dots([[x - 4, y - 2], [x + 4, y - 2]])} stroke={color} strokeWidth="7" />
+        <path d={dots([[x - 3, y + 4], [x + 3, y + 4]])} stroke={color} strokeWidth="5" />
+        <path d={`M${x} ${y - 4}v10`} stroke="#8a5aa8" strokeWidth="1.8" />
+      </g>)}
+      <path d="M152 398H348V410H152Z" fill="#b48ad4" stroke="#8a5aa8" strokeWidth="3" strokeLinejoin="round" />
+      <Arms fur={fur} />
+    </>,
+  },
+  cupcake: {
+    back: () => <Torso fill="#f8bfd2" stroke="#d98aa8" />,
+    front: ({ fur }) => <>
+      <path d="M148 404H352L370 452H130Z" fill="#dba97b" stroke="#b07f52" strokeWidth="3" strokeLinejoin="round" />
+      <path d={CUPCAKE_PLEATS} fill="none" stroke="#b9895a" strokeWidth="2.5" strokeLinecap="round" />
+      <path d={flounce(149, 384, 404, 8, 25.25, 11)} fill="#f8bfd2" />
+      <path d={`M149 404${scallops(8, 25.25, 11)}`} fill="none" stroke="#d98aa8" strokeWidth="3" strokeLinejoin="round" />
+      {SPRINKLES.map(({ color, d }) => <path key={color} d={d} fill="none" stroke={color} strokeWidth="3.2" strokeLinecap="round" />)}
+      <path d="M252 380Q258 368 268 364" fill="none" stroke="#7a5a3a" strokeWidth="3" strokeLinecap="round" />
+      <circle cx="250" cy="390" r="11" fill="#e0475b" stroke="#a82e43" strokeWidth="2.5" />
+      <path d="M244 386q2-3 5-3" fill="none" stroke="#fff" strokeOpacity=".8" strokeWidth="2.5" strokeLinecap="round" />
+      <Arms fur={fur} />
+    </>,
+  },
+  heart: {
+    back: () => <>
+      <Torso fill="#e968a9" stroke="#b8387c" />
+      <path d={hearts([[250, 388, 42]])} fill="#ffd6e8" stroke="#d98bb4" strokeWidth="2.5" strokeLinejoin="round" />
+    </>,
+    front: ({ fur }) => <>
+      <path d="M154 408H346L374 442H126Z" fill="#ee7db5" stroke="#b8387c" strokeWidth="3" strokeLinejoin="round" />
+      <path d={hearts([[212, 427, 11], [250, 429, 11], [288, 427, 11]])} fill="#ffd6e8" />
+      {HEM_HEARTS.map((x) => <path key={x} d={hearts([[x, 444, 28]])} fill="#ffd6e8" stroke="#d98bb4" strokeWidth="2.5" strokeLinejoin="round" />)}
+      <path d="M149 406H351V418H149Z" fill="#ffd6e8" stroke="#d98bb4" strokeWidth="3" strokeLinejoin="round" />
+      <Arms fur={fur} tone="#e968a9" line="#b8387c" reach={392} cuff="#ffd6e8" />
+    </>,
+  },
+  daisy: {
+    back: () => <>
+      <Torso fill="#b7c6f2" stroke="#8a9bd0" />
+      <path d="M176 354Q250 398 324 354" fill="none" stroke="#c7cfe9" strokeWidth="15" strokeDasharray="0.1 8" strokeLinecap="round" />
+      <path d="M176 354Q250 398 324 354" fill="none" stroke="#fffdf6" strokeWidth="11" strokeDasharray="0.1 8" strokeLinecap="round" />
+    </>,
+    front: ({ fur }) => <>
+      <path d="M152 414H348L380 448Q250 466 120 448Z" fill="#b7c6f2" stroke="#8a9bd0" strokeWidth="3" strokeLinejoin="round" />
+      <path d="M156 412H344" fill="none" stroke="#8cc276" strokeWidth="4" strokeLinecap="round" />
+      {flowers(DAISIES, '#fffdf6', '#c7cfe9', '#f6d66f', 8, 6)}
+      <Arms fur={fur} tone="#b7c6f2" line="#8a9bd0" reach={392} cuff="#fffdf6" />
     </>,
   },
 }
