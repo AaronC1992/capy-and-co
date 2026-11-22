@@ -1,9 +1,14 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { isValidElement } from 'react'
+import type { ReactElement, ReactNode } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import App from '../App'
 import { Capybara } from './Capybara'
+import { DressUpPanel } from './DressUpPanel'
+import { OUTFIT_LABELS, OutfitIcon } from './Outfit'
 import { mixColor } from '../game/color'
-import { createLook, STRAND_COUNT } from '../game/model'
+import { ACCESSORIES, CHARACTERS, createLook, OUTFITS, STRAND_COUNT } from '../game/model'
+import type { CharacterId, Outfit } from '../game/model'
 import { MIN_LENGTH } from '../game/hairLayout'
 
 afterEach(() => vi.unstubAllGlobals())
@@ -126,5 +131,64 @@ describe('application initialization and artwork', () => {
     const left = renderToStaticMarkup(<Capybara look={look} spray={{ nozzle: { x: 380, y: 200 }, target: { x: 280, y: 200 } }} />)
     expect(left).toContain('translate(380 200) rotate(180)')
     expect(left).toContain('scale(1 -1)')
+  })
+})
+
+// Walks what a component returns, without rendering it, to find the buttons a child could tap.
+function buttonsIn(node: ReactNode): ReactElement<{ onClick: () => void }>[] {
+  if (Array.isArray(node)) return node.flatMap(buttonsIn)
+  if (!isValidElement<{ children?: ReactNode }>(node)) return []
+  return node.type === 'button' ? [node as ReactElement<{ onClick: () => void }>] : buttonsIn(node.props.children)
+}
+
+describe('dress-up outfits', () => {
+  const wearing = (outfit: Outfit, character: CharacterId = 'mochi') => renderToStaticMarkup(<Capybara look={{ ...createLook(character), outfit }} />)
+  const idsIn = (html: string, attribute: RegExp) => [...html.matchAll(attribute)].map(([, id]) => id)
+
+  it('draws every outfit differently on every friend, with the same hair and head over the top', () => {
+    for (const { id } of CHARACTERS) {
+      const drawn = OUTFITS.map((outfit) => wearing(outfit, id))
+      expect(new Set(drawn).size).toBe(OUTFITS.length)
+      expect(drawn.filter((html) => (html.match(/data-strand=/g) ?? []).length === STRAND_COUNT && html.includes('data-testid="scalp-cap"'))).toHaveLength(OUTFITS.length)
+    }
+  })
+  it('defines every gradient an outfit paints with, once, so no cloth is left unpainted', () => {
+    for (const outfit of OUTFITS) {
+      const html = wearing(outfit)
+      const defined = idsIn(html, / id="([^"]+)"/g)
+      expect(new Set(defined).size, `${outfit} repeats an id`).toBe(defined.length)
+      expect(idsIn(html, /url\(#([^)]+)\)/g).filter((id) => !defined.includes(id)), `${outfit} paints with a missing id`).toEqual([])
+    }
+  })
+  it('keeps the capes of different capybaras on the page apart, as in the studio and the friend cards', () => {
+    const html = renderToStaticMarkup(<><Capybara look={createLook('mochi')} /><Capybara look={createLook('cocoa')} portrait /></>)
+    const defined = idsIn(html, / id="([^"]+)"/g)
+    expect(defined.filter((id) => id.endsWith('-cape'))).toHaveLength(2)
+    expect(new Set(defined).size).toBe(defined.length)
+  })
+  it('draws a small picture of every outfit for its button, each with its own name', () => {
+    const icons = OUTFITS.map((outfit) => renderToStaticMarkup(<OutfitIcon outfit={outfit} />))
+    expect(new Set(icons).size).toBe(OUTFITS.length)
+    expect(icons.filter((html) => html.includes('class="outfit-icon"') && html.includes('aria-hidden="true"'))).toHaveLength(OUTFITS.length)
+    const names = OUTFITS.map((outfit) => OUTFIT_LABELS[outfit].trim())
+    expect(names.every(Boolean)).toBe(true)
+    expect(new Set(names).size).toBe(OUTFITS.length)
+  })
+  it('lists every outfit by name above the accessories, marking only what is being worn', () => {
+    const html = renderToStaticMarkup(<DressUpPanel outfit="wizard" accessory="bow" dispatch={() => {}} />)
+    const tiles = [...html.matchAll(/aria-pressed="(true|false)"[^>]*>[\s\S]*?<span class="tool-label">([^<]+)<\/span>/g)].map(([, pressed, label]) => [label, pressed === 'true'] as const)
+    expect(tiles).toHaveLength(OUTFITS.length + ACCESSORIES.length)
+    expect(tiles.slice(0, OUTFITS.length)).toEqual(OUTFITS.map((outfit) => [OUTFIT_LABELS[outfit], outfit === 'wizard']))
+    expect(tiles.filter(([, worn]) => worn).map(([label]) => label)).toEqual(['Wizard robe', 'Little bow'])
+  })
+  it('puts on the outfit that is tapped, and the accessory that is tapped, through the same game action', () => {
+    const dispatch = vi.fn()
+    const tiles = buttonsIn(DressUpPanel({ outfit: 'cozy', accessory: 'none', dispatch }))
+    expect(tiles).toHaveLength(OUTFITS.length + ACCESSORIES.length)
+    tiles.forEach((tile) => tile.props.onClick())
+    expect(dispatch.mock.calls.map(([action]) => action)).toEqual([
+      ...OUTFITS.map((outfit) => ({ type: 'outfit', outfit })),
+      ...ACCESSORIES.map((accessory) => ({ type: 'accessory', accessory })),
+    ])
   })
 })

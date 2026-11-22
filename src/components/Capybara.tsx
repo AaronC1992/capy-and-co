@@ -12,6 +12,7 @@ import { HEAD_PATH } from '../game/headShape'
 import type { AirJet } from '../game/hairWind'
 import type { SprayJet } from '../game/hairSprayer'
 import { AirStream } from './AirStream'
+import { OutfitBack, OutfitFront, Paws } from './Outfit'
 import { SprayStream } from './SprayStream'
 
 function Decoration({ accessory }: { accessory: Accessory }) {
@@ -131,19 +132,13 @@ export const Capybara = memo(function Capybara({ look, svgRef, happy = false, po
   return <svg xmlns="http://www.w3.org/2000/svg" viewBox={portrait ? '80 55 340 355' : '0 0 500 520'} ref={svgRef} {...props}>
     <defs>
       <linearGradient id={`${id}-fur`} x1="0" y1="0" x2="1" y2="1"><stop stopColor={friend.light} /><stop offset="1" stopColor={friend.fur} /></linearGradient>
-      <linearGradient id={`${id}-cape`} x1="0" y1="0" x2="0.8" y2="1"><stop stopColor="#e8acaa" /><stop offset="1" stopColor="#d99394" /></linearGradient>
       <radialGradient id={`${id}-cheek`}><stop stopColor="#d88879" stopOpacity=".65" /><stop offset="1" stopColor="#d88879" stopOpacity="0" /></radialGradient>
     </defs>
     <ellipse cx="250" cy="483" rx="126" ry="15" fill="#6c6850" opacity=".1" />
     <path d="M179 424v52m142-52v52" stroke="#aa8770" strokeWidth="13" strokeLinecap="round" />
-    <rect x="149" y="305" width="202" height="140" rx="42" fill="#9bac95" stroke="#82977d" strokeWidth="3" />
-    <rect x="129" y="373" width="242" height="40" rx="16" fill="#b9c6a9" stroke="#82977d" strokeWidth="3" />
-    <path d="M172 433c-19 12-22 34-4 36h35l14-33m69 0 14 33h35c18-2 15-24-4-36" fill={friend.fur} stroke="#88694e" strokeWidth="3" />
-    <path d="M177 458v10m10-10v10m126-10v10m10-10v10" stroke="#88694e" strokeWidth="3" strokeLinecap="round" />
-    <path d="M185 327c-26 19-44 62-45 110 58 27 159 26 220 0-3-48-22-95-45-110Z" fill={`url(#${id}-cape)`} stroke="#bc8081" strokeWidth="3" />
-    <path d="m196 351-19 72m126-72 18 72" fill="none" stroke="#f2c6bd" strokeWidth="3" opacity=".65" />
-    <path d="M210 352q40 25 81 0" fill="none" stroke="#fff4df" strokeWidth="15" />
-    <g fill="none" stroke="#f9ddd1" strokeWidth="2.5" strokeLinecap="round"><path d="M234 402c-14-10-20 6 16 26 36-20 30-36 16-26l-16 12Z" /><path d="m213 395 4 4m68-4-4 4m-31-14v5" /></g>
+    <OutfitBack outfit={look.outfit} id={id} fur={friend.fur} light={friend.light} />
+    <Paws fur={friend.fur} />
+    <OutfitFront outfit={look.outfit} id={id} fur={friend.fur} light={friend.light} />
     <path d="M184 227c-45-49-55 25-21 32m150-32c45-49 55 25 21 32" fill={friend.fur} stroke="#89664e" strokeWidth="3.5" />
     <path d="M170 239q-16-21-14 2m171-2q16-21 14 2" fill="none" stroke="#b47b69" strokeWidth="9" strokeLinecap="round" />
     <path d={HEAD_PATH} fill={`url(#${id}-fur)`} stroke="#89664e" strokeWidth="3.5" />

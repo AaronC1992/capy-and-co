@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { createLooks, HAIR_GROUP_COUNT, salonReducer, STRAND_COUNT } from './model'
-import type { SalonAction, SalonState, Tool } from './model'
+import { createLooks, DEFAULT_OUTFIT, HAIR_GROUP_COUNT, OUTFITS, salonReducer, STRAND_COUNT } from './model'
+import type { Outfit, SalonAction, SalonState, Tool } from './model'
 import { hitHair, hitHairStroke, strandPoints } from './hair'
 import { isBald, MIN_LENGTH } from './hairLayout'
 
@@ -336,6 +336,50 @@ describe('cutting hair right down to the scalp', () => {
     const stubble = salonReducer(state, { type: 'lengths', edits: [{ index: 5, length: 0 }], checkpoint: true })
     expect(isBald(stubble.looks.mochi.hair[5].length)).toBe(false)
     expect(stubble.looks.mochi.hair[5].length).toBe(0)
+  })
+})
+
+describe('dress up', () => {
+  it('offers plenty of different outfits, and every friend starts out in the cozy cape', () => {
+    expect(OUTFITS.length).toBeGreaterThanOrEqual(15)
+    expect(new Set(OUTFITS).size).toBe(OUTFITS.length)
+    expect(DEFAULT_OUTFIT).toBe('cozy')
+    for (const look of Object.values(createLooks())) expect(look.outfit).toBe(DEFAULT_OUTFIT)
+  })
+  it('puts an outfit on only the active friend, as one undo, leaving her hair and accessory alone', () => {
+    const styled = salonReducer(salonReducer(initial(), style('color')), { type: 'accessory', accessory: 'bow' })
+    const dressed = salonReducer(styled, { type: 'outfit', outfit: 'wizard' })
+    expect(dressed.looks.mochi.outfit).toBe('wizard')
+    expect(dressed.looks.mochi.hair).toBe(styled.looks.mochi.hair)
+    expect(dressed.looks.mochi.accessory).toBe('bow')
+    expect(dressed.looks.biscuit).toBe(styled.looks.biscuit)
+    expect(dressed.history).toHaveLength(styled.history.length + 1)
+    expect(salonReducer(dressed, { type: 'undo' }).looks.mochi).toBe(styled.looks.mochi)
+  })
+  it('keeps the outfit through styling, and gives every friend her own', () => {
+    const dressed = salonReducer(initial(), { type: 'outfit', outfit: 'tutu' })
+    const styled = salonReducer(salonReducer(dressed, style('curl', [3, 4])), style('snip', [5]))
+    expect(styled.looks.mochi.outfit).toBe('tutu')
+    const biscuit = salonReducer(styled, { type: 'select', character: 'biscuit' })
+    expect(biscuit.looks.biscuit.outfit).toBe(DEFAULT_OUTFIT)
+    expect(salonReducer(biscuit, { type: 'select', character: 'mochi' }).looks.mochi.outfit).toBe('tutu')
+  })
+  it('ignores the outfit already being worn and outfits that do not exist', () => {
+    const state = initial()
+    expect(salonReducer(state, { type: 'outfit', outfit: DEFAULT_OUTFIT })).toBe(state)
+    expect(salonReducer(state, { type: 'outfit', outfit: 'pirate' as Outfit })).toBe(state)
+    const dressed = salonReducer(state, { type: 'outfit', outfit: 'hero' })
+    expect(salonReducer(dressed, { type: 'outfit', outfit: 'hero' })).toBe(dressed)
+  })
+  it('lets every outfit be tried on in turn, and puts the cozy cape back on reset', () => {
+    let state = initial()
+    for (const outfit of OUTFITS.filter((name) => name !== DEFAULT_OUTFIT)) {
+      state = salonReducer(state, { type: 'outfit', outfit })
+      expect(state.looks.mochi.outfit).toBe(outfit)
+    }
+    const reset = salonReducer(state, { type: 'reset' })
+    expect(reset.looks.mochi.outfit).toBe(DEFAULT_OUTFIT)
+    expect(salonReducer(reset, { type: 'undo' }).looks.mochi.outfit).toBe(OUTFITS.at(-1))
   })
 })
 

@@ -1,7 +1,8 @@
 import { useRef, useState } from 'react'
 import type { Dispatch, KeyboardEvent } from 'react'
-import { ACCESSORIES, COLORS, COLOR_NAMES } from '../game/model'
-import type { Accessory, SalonAction, Tool } from '../game/model'
+import { COLORS, COLOR_NAMES } from '../game/model'
+import type { Accessory, Outfit, SalonAction, Tool } from '../game/model'
+import { DressUpPanel } from './DressUpPanel'
 import { Icon } from './Icon'
 
 const TOOLS: { id: Tool; label: string; note: string; tint: string }[] = [
@@ -17,19 +18,19 @@ const TOOLS: { id: Tool; label: string; note: string; tint: string }[] = [
 ]
 const TABS = ['Style', 'Color', 'Dress up'] as const
 type Tab = typeof TABS[number]
-const ACCESSORY_LABELS: Record<Accessory, string> = { none: 'No accessory', bow: 'Little bow', flower: 'Daisy day', crown: 'Royal capy', cherries: 'Cherry cute', star: 'Superstar' }
 
 interface Props {
   tool: Tool
   onTool: (tool: Tool) => void
   color: string
   onColor: (color: string) => void
+  outfit: Outfit
   accessory: Accessory
   dispatch: Dispatch<SalonAction>
   onPhoto: () => void
 }
 
-export function Toolbox({ tool, onTool, color, onColor, accessory, dispatch, onPhoto }: Props) {
+export function Toolbox({ tool, onTool, color, onColor, outfit, accessory, dispatch, onPhoto }: Props) {
   const [tab, setTab] = useState<Tab>('Style')
   const tabsRef = useRef<HTMLDivElement>(null)
   function chooseTab(next: Tab) {
@@ -67,7 +68,7 @@ export function Toolbox({ tool, onTool, color, onColor, accessory, dispatch, onP
         <div className="color-grid">{COLORS.map((value, index) => <button key={value} aria-label={COLOR_NAMES[index]} aria-pressed={color === value} className={`color-button ${color === value ? 'selected' : ''}`} onClick={() => { onColor(value); onTool('color') }}><span className="swatch" style={{ background: value }}>{color === value && <Icon name="check" size={21} />}</span><span>{COLOR_NAMES[index]}</span></button>)}</div>
         <div className="little-note"><Icon name="heart" size={17} /> Every lock can be a different color.</div>
       </div>}
-      {tab === 'Dress up' && <div className="accessory-panel"><h3>The cherry on top</h3><p>Tap a little something to try it on.</p><div className="tool-grid accessory-grid">{ACCESSORIES.map((item) => <button key={item} className={`tool-button ${accessory === item ? 'selected' : ''}`} aria-pressed={accessory === item} onClick={() => dispatch({ type: 'accessory', accessory: item })}><Icon name={item} size={34} /><span className="tool-label">{ACCESSORY_LABELS[item]}</span></button>)}</div></div>}
+      {tab === 'Dress up' && <DressUpPanel outfit={outfit} accessory={accessory} dispatch={dispatch} />}
     </div>
     <div className="picture-section"><p>Made something you love?</p><button className="primary-button photo-button" onClick={onPhoto}><Icon name="camera" size={21} /> Picture perfect! <Icon name="arrow" size={19} /></button><span>Save a happy little memory.</span></div>
   </aside>

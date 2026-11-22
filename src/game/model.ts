@@ -13,6 +13,13 @@ export type CharacterId = typeof CHARACTERS[number]['id']
 export type Tool = 'brush' | 'comb' | 'snip' | 'grow' | 'curl' | 'soap' | 'wash' | 'blower' | 'color'
 export const ACCESSORIES = ['none', 'bow', 'flower', 'crown', 'cherries', 'star'] as const
 export type Accessory = typeof ACCESSORIES[number]
+// Clothes to dress up in, in the order they are offered. The first is what every capybara starts out wearing.
+export const OUTFITS = [
+  'cozy', 'hero', 'sweater', 'overalls', 'princess', 'tutu', 'hoodie', 'raincoat', 'party',
+  'tee', 'garland', 'wizard', 'sailor', 'apron', 'pajamas', 'poncho', 'tuxedo', 'fairy',
+] as const
+export type Outfit = typeof OUTFITS[number]
+export const DEFAULT_OUTFIT: Outfit = 'cozy'
 export const COLORS = ['#eb9c95', '#b5a0d8', '#8cbfc4', '#a6bd87', '#e5b75c', '#c07955', '#6e5147', '#f3e1bd'] as const
 export const COLOR_NAMES = ['Strawberry', 'Lavender', 'Blueberry', 'Pistachio', 'Honey', 'Caramel', 'Chocolate', 'Vanilla'] as const
 export const HAIR_BEND_LIMITS = { minX: -95, maxX: 95, minY: -65, maxY: 85 } as const
@@ -38,6 +45,7 @@ export interface Look {
   character: CharacterId
   hair: Strand[]
   accessory: Accessory
+  outfit: Outfit
 }
 
 export interface HairLengthEdit {
@@ -91,6 +99,7 @@ export type SalonAction =
   | { type: 'curl'; edits: HairCurlEdit[]; checkpoint: boolean }
   | { type: 'air'; edits: HairAirEdit[]; checkpoint: boolean }
   | { type: 'accessory'; accessory: Accessory }
+  | { type: 'outfit'; outfit: Outfit }
   | { type: 'undo' }
   | { type: 'reset' }
 
@@ -99,6 +108,7 @@ export function createLook(character: CharacterId): Look {
   return {
     character,
     accessory: 'none',
+    outfit: DEFAULT_OUTFIT,
     hair: Array.from({ length: STRAND_COUNT }, (_, i) => ({
       length: i % HAIR_GROUP_COUNT > 10 ? 0.45 : 0.52 + Math.sin(i % HAIR_GROUP_COUNT * 0.75) * 0.13,
       color: friend.hair,
@@ -215,6 +225,10 @@ export function salonReducer(state: SalonState, action: SalonAction): SalonState
   if (action.type === 'accessory') {
     if (action.accessory === current.accessory) return state
     return { ...state, looks: { ...state.looks, [state.active]: { ...current, accessory: action.accessory } }, history: remember(state) }
+  }
+  if (action.type === 'outfit') {
+    if (action.outfit === current.outfit || !OUTFITS.includes(action.outfit)) return state
+    return { ...state, looks: { ...state.looks, [state.active]: { ...current, outfit: action.outfit } }, history: remember(state) }
   }
   if (action.type === 'lengths') {
     const next = applyHairLengths(current, action.edits)

@@ -114,7 +114,7 @@ export default function App() {
           <Studio look={look} tool={tool} color={color} dispatch={dispatch} onStyle={playSound} canUndo={state.history.length > 0} />
           <div className="studio-caption"><span><span className="small-dot" /> Your very own little salon</span><span>Big ideas welcome. Perfect hair optional.</span></div>
         </div>
-        <Toolbox tool={tool} onTool={setTool} color={color} onColor={setColor} accessory={look.accessory} dispatch={dispatch} onPhoto={takePhoto} />
+        <Toolbox tool={tool} onTool={setTool} color={color} onColor={setColor} outfit={look.outfit} accessory={look.accessory} dispatch={dispatch} onPhoto={takePhoto} />
       </div>
       <footer className="site-footer"><span>Made for little hands & big imaginations <Icon name="heart" size={13} /></span><button className="mobile-help" onClick={() => setModal('help')}>How to play <Icon name="help" size={15} /></button><span>No scores. No rush. Just happy capys.</span></footer>
     </main>
@@ -124,7 +124,7 @@ export default function App() {
         : <div className="help-content">
           <div className="help-step"><span>1</span><div><h3>Meet your new bestie.</h3><p>Choose Mochi, Biscuit, or Cocoa. Each friend keeps their own look.</p></div></div>
           <div className="help-step"><span>2</span><div><h3>A little snip. A little magic.</h3><p>Pick a tool, then use a finger, mouse, or pen. Keep dragging with Brush: hair stays where you leave it. Trace a line with the gel Comb and the hair lies along it. Drag Snip to cut that spot, all the way down to a bald patch if you like, or hold Grow to make an area longer or bring bare scalp back. Hold Curl on the hair: the longer you hold, the curlier it gets. “Do all the hair” styles it all at once.</p></div></div>
-          <div className="help-step"><span>3</span><div><h3>Make it their own.</h3><p>Soap adds bubbles that stay until you Wash them off. Wash is a water sprayer: hold it on the hair and watch it get soaked, rinse clean and hang straight down. Hold and swipe with Blow-dry to whoosh the hair around. It flaps the way the air blows, dries the hair, and stays blown into a new shape! Try Color and Dress up, or Undo a change.</p></div></div>
+          <div className="help-step"><span>3</span><div><h3>Make it their own.</h3><p>Soap adds bubbles that stay until you Wash them off. Wash is a water sprayer: hold it on the hair and watch it get soaked, rinse clean and hang straight down. Hold and swipe with Blow-dry to whoosh the hair around. It flaps the way the air blows, dries the hair, and stays blown into a new shape! Try Color, or Dress up for new outfits and a little something on top. Undo a change any time.</p></div></div>
           <div className="help-step"><span>4</span><div><h3>Say capy!</h3><p>“Picture perfect!” adds a snapshot to My gallery. Download it as a picture to keep or print.</p></div></div>
           <div className="parent-note"><h3>A note for grown-ups</h3><p>No ads, accounts, purchases, or tracking. Looks stay on this device and browser, not in the cloud. Clearing browser data clears the gallery. Download favorites first. Sound is optional.</p><p>Keyboard: Tab to controls, Enter or Space to use them. On the capybara, Enter styles all hair. Arrow keys switch tool tabs. Escape closes this window.</p></div>
           <button className="primary-button" onClick={() => setModal(null)}>Let's play <Icon name="arrow" size={19} /></button>

@@ -78,6 +78,45 @@ describe('local persistence', () => {
     expect(saveGame(storage, data)).toBeNull()
     expect(loadGame(storage)).toEqual({ data, error: null })
   })
+  it('keeps the outfit each friend and each saved picture is wearing through a reload', () => {
+    const storage = memoryStorage()
+    const data = freshSave()
+    data.looks.cocoa.outfit = 'wizard'
+    data.looks.mochi.outfit = 'fairy'
+    data.photos = addPhoto([], data.looks.cocoa, 'photo-1', '2026-01-01T12:00:00Z')
+    data.looks.cocoa.outfit = 'tutu'
+    expect(saveGame(storage, data)).toBeNull()
+    const loaded = loadGame(storage)
+    expect(loaded).toEqual({ data, error: null })
+    expect(loaded.data.looks.mochi.outfit).toBe('fairy')
+    expect(loaded.data.looks.cocoa.outfit).toBe('tutu')
+    expect(loaded.data.photos[0].look.outfit).toBe('wizard')
+  })
+  it('opens saves from before dress-up in the original cozy cape, in looks and saved pictures', () => {
+    const storage = memoryStorage()
+    const data = freshSave()
+    data.photos = addPhoto([], data.looks.mochi, 'old', '2026-01-01T12:00:00Z')
+    const legacy = JSON.parse(JSON.stringify(data))
+    for (const look of [...Object.values<{ outfit?: string }>(legacy.looks), legacy.photos[0].look]) delete look.outfit
+    expect(JSON.stringify(legacy)).not.toContain('outfit')
+    storage.setItem(STORAGE_KEY, JSON.stringify(legacy))
+    const loaded = loadGame(storage)
+    expect(loaded).toEqual({ data, error: null })
+    expect(Object.values(loaded.data.looks).every((look) => look.outfit === 'cozy')).toBe(true)
+    expect(loaded.data.photos[0].look.outfit).toBe('cozy')
+  })
+  it('rejects an outfit that does not exist, in both looks and saved pictures', () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    for (const outfit of ['', 'pirate', 'Cozy', 7, null, {}]) {
+      const corrupted = { ...createLook('mochi'), outfit }
+      expect(isLook(corrupted)).toBe(false)
+      const storage = memoryStorage()
+      storage.setItem(STORAGE_KEY, JSON.stringify({ ...freshSave(), photos: [{ id: 'bad', look: corrupted, createdAt: '2026-01-01T12:00:00Z' }] }))
+      expect(loadGame(storage).error).not.toBeNull()
+      storage.setItem(STORAGE_KEY, JSON.stringify({ ...freshSave(), looks: { ...freshSave().looks, mochi: corrupted } }))
+      expect(loadGame(storage).error).not.toBeNull()
+    }
+  })
   it('rejects malformed or out-of-bounds poses and lather in both looks and saved pictures', () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {})
     for (const invalid of [{ bendX: 96 }, { bendY: -66 }, { bendY: null }, { bendX: '50' }, { soapy: 'yes' }, { wetness: 2 }, { wetness: -0.1 }, { wetness: 'wet' },

@@ -1,14 +1,15 @@
-import { ACCESSORIES, CHARACTERS, createLooks, HAIR_BEND_LIMITS, HAIR_GROUP_COUNT, STRAND_COUNT } from './model'
+import { ACCESSORIES, CHARACTERS, createLooks, DEFAULT_OUTFIT, HAIR_BEND_LIMITS, HAIR_GROUP_COUNT, OUTFITS, STRAND_COUNT } from './model'
 import { isHairShape, MIN_LENGTH } from './hairLayout'
-import type { CharacterId, Look, Looks, Strand } from './model'
+import type { CharacterId, Look, Looks, Outfit, Strand } from './model'
 
 export const STORAGE_KEY = 'capy-and-co:v1'
 export const MAX_PHOTOS = 12
 export interface Photo { id: string; look: Look; createdAt: string }
 export interface SavedGame { version: 2; active: CharacterId; looks: Looks; photos: Photo[]; sound: boolean }
-// Saves made when curls were simply on or off hold a yes or no instead of how curly the hair is.
+// Saves made when curls were simply on or off hold a yes or no instead of how curly the hair is,
+// and saves from before dress-up have no outfit at all.
 type StoredStrand = Omit<Strand, 'curl'> & { curl: number | boolean }
-type StoredLook = Omit<Look, 'hair'> & { hair: StoredStrand[] }
+type StoredLook = Omit<Look, 'hair' | 'outfit'> & { outfit?: Outfit; hair: StoredStrand[] }
 type StoredGame = Omit<SavedGame, 'version' | 'looks' | 'photos'> & {
   version: 1 | 2
   looks: Record<CharacterId, StoredLook>
@@ -36,6 +37,7 @@ function isOptionalBoundedNumber(value: unknown, min: number, max: number): bool
 
 export function isLook(value: unknown, legacy = false): value is StoredLook {
   if (!isRecord(value) || !isCharacter(value.character) || !ACCESSORIES.some((a) => a === value.accessory)) return false
+  if (value.outfit !== undefined && !OUTFITS.some((o) => o === value.outfit)) return false
   return Array.isArray(value.hair) && (value.hair.length === STRAND_COUNT || (legacy && value.hair.length === HAIR_GROUP_COUNT)) && value.hair.every((strand: unknown) =>
     isRecord(strand)
     && typeof strand.length === 'number' && Number.isFinite(strand.length) && strand.length >= MIN_LENGTH && strand.length <= 1
@@ -74,7 +76,7 @@ function readLook(look: StoredLook): Look {
   const hair = look.hair.length === STRAND_COUNT
     ? look.hair
     : Array.from({ length: STRAND_COUNT }, (_, index) => look.hair[index % HAIR_GROUP_COUNT])
-  return { ...look, hair: hair.map((strand) => ({ ...strand, curl: readCurl(strand.curl) })) }
+  return { ...look, outfit: look.outfit ?? DEFAULT_OUTFIT, hair: hair.map((strand) => ({ ...strand, curl: readCurl(strand.curl) })) }
 }
 
 export function loadGame(storage: StoragePort): { data: SavedGame; error: string | null } {
