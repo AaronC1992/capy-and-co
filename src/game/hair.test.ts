@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { closestPointOnStroke, CURL_DENSITY, curlyPoints, drawStrand, hitHair, hitHairStroke, PATH_TOLERANCE, strandPath, strandPoints, touchStrands } from './hair'
+import { closestPointOnStroke, CURL_DENSITY, curlyPoints, drawStrand, FLOOR_Y, hitHair, hitHairStroke, PATH_TOLERANCE, strandPath, strandPoints, touchStrands } from './hair'
 import type { Point } from './hair'
-import { HAIR_POINTS, MIN_LENGTH } from './hairLayout'
+import { HAIR_POINTS, MAX_LENGTH, MIN_LENGTH, strandReach } from './hairLayout'
 import type { HairShape } from './hairLayout'
 import { createLook } from './model'
 
@@ -120,6 +120,49 @@ describe('painting curls', () => {
   it('curls the same way every time for the same strand, so it does not shimmer as it is redrawn', () => {
     const points = strandPoints(strand(), STRAND)
     expect(curlyPoints(points, 0.7, STRAND)).toEqual(curlyPoints(points, 0.7, STRAND))
+  })
+})
+
+describe('floor-length hair', () => {
+  const long = createLook('mochi')
+  long.hair = long.hair.map((strand) => ({ ...strand, length: MAX_LENGTH }))
+  it('tips over at full height and falls all the way to the floor without leaving the picture', () => {
+    long.hair.forEach((strand, index) => {
+      const points = strandPoints(strand, index)
+      for (const point of points) {
+        expect(point.x, `strand ${index}`).toBeGreaterThanOrEqual(0)
+        expect(point.x, `strand ${index}`).toBeLessThanOrEqual(500)
+        expect(point.y, `strand ${index}`).toBeLessThanOrEqual(FLOOR_Y)
+      }
+      expect(points[HAIR_POINTS].y, `strand ${index}`).toBeGreaterThan(FLOOR_Y - 15)
+    })
+  })
+  it('only adds hair at the tip as it grows past full height, leaving the rest where it was', () => {
+    const at = (length: number) => strandPoints({ ...strand(), length }, STRAND)
+    const shorter = at(2.5)
+    const longer = at(MAX_LENGTH)
+    const share = strandReach(2.5, STRAND) / strandReach(MAX_LENGTH, STRAND)
+    // The shorter strand's tip lies on the longer strand's line, the same distance along it.
+    const along = share * HAIR_POINTS
+    const below = Math.floor(along)
+    const between = { x: longer[below].x + (longer[below + 1].x - longer[below].x) * (along - below), y: longer[below].y + (longer[below + 1].y - longer[below].y) * (along - below) }
+    expect(Math.hypot(shorter[HAIR_POINTS].x - between.x, shorter[HAIR_POINTS].y - between.y)).toBeLessThan(6)
+  })
+  it('draws long hair as smoothly as hair at full height, through each of its points', () => {
+    const longestPiece = (line: readonly Point[]) => Math.max(...line.slice(1).map((point, i) => Math.hypot(point.x - line[i].x, point.y - line[i].y)))
+    const fullCurls = { ...strand(), length: 1, curl: 1 }
+    const standingCurls = longestPiece(drawStrand(fullCurls, STRAND, strandPoints(fullCurls, STRAND)).line)
+    for (const curl of [0, 1]) {
+      const lock = { ...long.hair[STRAND], curl }
+      const points = strandPoints(lock, STRAND)
+      const { line, stride } = drawStrand(lock, STRAND, points)
+      expect(stride).toBeGreaterThan(curl ? CURL_DENSITY : 1)
+      expect(line).toHaveLength(HAIR_POINTS * stride + 1)
+      for (let step = 0; step <= HAIR_POINTS; step += 1) {
+        expect(Math.hypot(line[step * stride].x - points[step].x, line[step * stride].y - points[step].y)).toBeLessThanOrEqual(curl ? 10.6 : 1e-9)
+      }
+      expect(longestPiece(line)).toBeLessThan(curl ? standingCurls : 12)
+    }
   })
 })
 

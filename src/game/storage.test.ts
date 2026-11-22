@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { addPhoto, freshSave, isLook, loadGame, MAX_PHOTOS, saveGame, STORAGE_KEY } from './storage'
 import type { StoragePort } from './storage'
 import { createLook, HAIR_GROUP_COUNT, MAX_CLIPS, STRAND_COUNT } from './model'
-import { MIN_LENGTH } from './hairLayout'
+import { HAIR_SHAPE_LIMIT, MAX_LENGTH, MIN_LENGTH } from './hairLayout'
 import type { Scene } from './photoBooth'
 
 function memoryStorage(): StoragePort {
@@ -84,6 +84,7 @@ describe('local persistence', () => {
     const data = freshSave()
     data.looks.mochi.hair[5] = { length: MIN_LENGTH, color: '#eb9c95', curl: 0, flow: 0.3 }
     data.looks.mochi.hair[6] = { ...data.looks.mochi.hair[6], length: -0.1 }
+    data.looks.mochi.hair[7] = { ...data.looks.mochi.hair[7], length: MAX_LENGTH }
     data.photos = addPhoto([], data.looks.mochi, 'shaved', '2026-01-01T12:00:00Z')
     expect(isLook(data.looks.mochi)).toBe(true)
     expect(saveGame(storage, data)).toBeNull()
@@ -131,8 +132,8 @@ describe('local persistence', () => {
   it('rejects malformed or out-of-bounds poses and lather in both looks and saved pictures', () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {})
     for (const invalid of [{ bendX: 96 }, { bendY: -66 }, { bendY: null }, { bendX: '50' }, { soapy: 'yes' }, { wetness: 2 }, { wetness: -0.1 }, { wetness: 'wet' },
-      { curl: 1.5 }, { curl: -0.2 }, { curl: '0.5' }, { curl: null }, { curl: Number.NaN }, { length: MIN_LENGTH - 0.01 }, { length: 1.01 },
-      { shape: [1, 2] }, { shape: null }, { shape: new Array(48).fill(301) }, { shape: new Array(48).fill('1') }, { shape: new Array(48).fill(null) }]) {
+      { curl: 1.5 }, { curl: -0.2 }, { curl: '0.5' }, { curl: null }, { curl: Number.NaN }, { length: MIN_LENGTH - 0.01 }, { length: MAX_LENGTH + 0.01 },
+      { shape: [1, 2] }, { shape: null }, { shape: new Array(48).fill(HAIR_SHAPE_LIMIT + 1) }, { shape: new Array(48).fill('1') }, { shape: new Array(48).fill(null) }]) {
       const look = createLook('mochi')
       const corrupted = { ...look, hair: look.hair.map((strand, i) => i === 5 ? { ...strand, ...invalid } : strand) }
       expect(isLook(corrupted)).toBe(false)
@@ -177,6 +178,41 @@ describe('local persistence', () => {
     const { hat: _hat, glasses: _glasses, headband: _headband, clips: _clips, ...old } = look
     expect(isLook({ ...old, accessory: 'cherries' })).toBe(true)
     expect(isLook({ ...old, accessory: 'monocle' })).toBe(false)
+    expect(isLook({ ...old, accessory: 'cherries', placed: {} })).toBe(false)
+  })
+  it('keeps where the hat, glasses and headband were moved, and rejects spots for things not worn or off the picture', () => {
+    const look = { ...createLook('mochi'), hat: 'crown' as const, glasses: 'round' as const }
+    const placed = { hat: { x: 300, y: 120 }, glasses: { x: 250, y: 180 } }
+    expect(isLook({ ...look, placed })).toBe(true)
+    for (const invalid of [{ headband: { x: 250, y: 150 } }, { outfit: { x: 250, y: 150 } }, { hat: { x: 300 } }, { hat: { x: 300, y: 9999 } }, { hat: [300, 120] }, []]) {
+      expect(isLook({ ...look, placed: invalid })).toBe(false)
+    }
+    const storage = memoryStorage()
+    const data = freshSave()
+    data.looks.mochi = { ...look, placed }
+    data.photos = addPhoto([], data.looks.mochi, 'moved', '2026-01-01T12:00:00Z')
+    expect(saveGame(storage, data)).toBeNull()
+    const loaded = loadGame(storage).data
+    expect(loaded).toEqual(data)
+    expect(loaded.looks.mochi.placed).not.toBe(placed)
+    expect(data.photos[0].look.placed).not.toBe(placed)
+    expect(loaded.looks.cocoa).not.toHaveProperty('placed')
+  })
+  it('keeps makeup and lashes through a reload, opens older saves bare-faced, and rejects makeup that does not exist', () => {
+    const look = { ...createLook('mochi'), lashes: 'rainbow' as const, eyeshadow: 'lilac' as const, blush: 'freckles' as const, lipstick: 'coral' as const }
+    for (const invalid of [{ lashes: 'crown' }, { eyeshadow: 'Pink' }, { blush: 7 }, { lipstick: null }]) expect(isLook({ ...look, ...invalid })).toBe(false)
+    const storage = memoryStorage()
+    const data = freshSave()
+    data.looks.mochi = look
+    data.photos = addPhoto([], look, 'glam', '2026-01-01T12:00:00Z')
+    expect(saveGame(storage, data)).toBeNull()
+    expect(loadGame(storage)).toEqual({ data, error: null })
+    const older = JSON.parse(JSON.stringify(data))
+    for (const saved of [...Object.values<Record<string, unknown>>(older.looks), older.photos[0].look]) for (const slot of ['lashes', 'eyeshadow', 'blush', 'lipstick']) delete saved[slot]
+    storage.setItem(STORAGE_KEY, JSON.stringify(older))
+    const loaded = loadGame(storage)
+    expect(loaded.error).toBeNull()
+    expect([...Object.values(loaded.data.looks), loaded.data.photos[0].look].every((saved) => saved.lashes === 'none' && saved.eyeshadow === 'none' && saved.blush === 'none' && saved.lipstick === 'none')).toBe(true)
   })
   it('rejects invalid hair lengths, colors and mismatched characters', () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {})

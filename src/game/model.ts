@@ -1,4 +1,4 @@
-import { HAIR_GROUP_COUNT, HAIR_POINTS, HAIR_SHAPE_LENGTH, isBald, MIN_LENGTH, normalizeShape, scaleShape, STRAND_COUNT, STRANDS_PER_GROUP, strandReach } from './hairLayout'
+import { HAIR_GROUP_COUNT, HAIR_POINTS, HAIR_SHAPE_LENGTH, isBald, MAX_LENGTH, MIN_LENGTH, normalizeShape, resizeShape, STRAND_COUNT, STRANDS_PER_GROUP, strandReach } from './hairLayout'
 import type { HairShape } from './hairLayout'
 
 export { HAIR_GROUP_COUNT, STRAND_COUNT, STRANDS_PER_GROUP }
@@ -23,6 +23,18 @@ export type Headband = typeof HEADBANDS[number]
 export type ClipKind = typeof CLIP_KINDS[number]
 export const WEARABLES = { hat: HATS, glasses: GLASSES, headband: HEADBANDS } as const
 export type WearSlot = keyof typeof WEARABLES
+export const LASHES = ['none', 'natural', 'long', 'curly', 'doll', 'sparkle', 'rainbow'] as const
+export const EYESHADOWS = ['none', 'pink', 'lilac', 'sky', 'peach', 'gold', 'rainbow'] as const
+export const BLUSHES = ['none', 'rosy', 'peach', 'berry', 'hearts', 'stars', 'freckles'] as const
+export const LIPSTICKS = ['none', 'pink', 'cherry', 'coral', 'berry', 'gloss', 'glitter'] as const
+export type Lashes = typeof LASHES[number]
+export type Eyeshadow = typeof EYESHADOWS[number]
+export type Blush = typeof BLUSHES[number]
+export type Lipstick = typeof LIPSTICKS[number]
+// Makeup is painted on the face rather than worn on it, so it can't be moved around or dropped off.
+export const MAKEUP = { lashes: LASHES, eyeshadow: EYESHADOWS, blush: BLUSHES, lipstick: LIPSTICKS } as const
+export type MakeupSlot = keyof typeof MAKEUP
+const DRESS_UP: Record<WearSlot | MakeupSlot, readonly string[]> = { ...WEARABLES, ...MAKEUP }
 // The studio picture the capybara is drawn in; clips can go anywhere inside it.
 export const STAGE = { width: 500, height: 520 } as const
 // Clothes to dress up in, in the order they are offered. The first is what every capybara starts out wearing.
@@ -45,9 +57,14 @@ export const HEX_COLOR = /^#[0-9a-f]{6}$/i
 export const HAIR_BEND_LIMITS = { minX: -95, maxX: 95, minY: -65, maxY: 85 } as const
 // Pressing "do all the hair" with the curl tool winds every strand this much more; three presses make it fully curly.
 const CURL_PER_PRESS = 0.34
+// Pressing "do all the hair" with the scissors or the grow tool changes every strand's length this much.
+const LENGTH_PER_PRESS = 0.2
+// Hair past full length falls a long way, so each press grows or trims it by more.
+const FALLEN_LENGTH_PER_PRESS = 0.5
 
 export interface Strand {
-  // How long the hair is, up to 1 for full length. MIN_LENGTH is hair cut right down to the scalp (see `isBald`).
+  // How long the hair is: 1 stands at full height and MAX_LENGTH falls all the way to the floor. MIN_LENGTH is hair cut
+  // right down to the scalp (see `isBald`).
   length: number
   color: string
   // How curly the hair is: 0 is straight, 1 is the tightest curls.
@@ -76,6 +93,11 @@ export interface Clip {
   step?: number
 }
 
+export interface Spot {
+  x: number
+  y: number
+}
+
 export interface Look {
   character: CharacterId
   hair: Strand[]
@@ -84,6 +106,12 @@ export interface Look {
   glasses: Glasses
   headband: Headband
   clips: Clip[]
+  // Where the hat, glasses or headband was moved to; anything not listed sits where it usually does.
+  placed?: Partial<Record<WearSlot, Spot>>
+  lashes: Lashes
+  eyeshadow: Eyeshadow
+  blush: Blush
+  lipstick: Lipstick
 }
 
 export interface HairLengthEdit {
@@ -137,7 +165,9 @@ export type SalonAction =
   | { type: 'lengths'; edits: HairLengthEdit[]; checkpoint: boolean }
   | { type: 'curl'; edits: HairCurlEdit[]; checkpoint: boolean }
   | { type: 'air'; edits: HairAirEdit[]; checkpoint: boolean }
-  | { type: 'wear'; slot: WearSlot; item: string }
+  | { type: 'wear'; slot: WearSlot | MakeupSlot; item: string }
+  // Moves the hat, glasses or headband being worn so it sits at `x`, `y` (see `wornSpot`).
+  | { type: 'place'; slot: WearSlot; x: number; y: number }
   // Every clip being worn, after one was put on, moved or taken off.
   | { type: 'clips'; clips: Clip[] }
   | { type: 'outfit'; outfit: Outfit }
@@ -153,6 +183,10 @@ export function createLook(character: CharacterId): Look {
     glasses: 'none',
     headband: 'none',
     clips: [],
+    lashes: 'none',
+    eyeshadow: 'none',
+    blush: 'none',
+    lipstick: 'none',
     hair: Array.from({ length: STRAND_COUNT }, (_, i) => ({
       length: i % HAIR_GROUP_COUNT > 10 ? 0.45 : 0.52 + Math.sin(i % HAIR_GROUP_COUNT * 0.75) * 0.13,
       color: friend.hair,
@@ -164,6 +198,17 @@ export function createLook(character: CharacterId): Look {
 
 export function createLooks(): Looks {
   return { mochi: createLook('mochi'), biscuit: createLook('biscuit'), cocoa: createLook('cocoa') }
+}
+
+const round1 = (value: number) => Math.round(value * 10) / 10
+
+function movedBack(look: Look, slot: WearSlot): Look {
+  if (!look.placed?.[slot]) return look
+  const placed = { ...look.placed }
+  delete placed[slot]
+  const next: Look = { ...look, placed }
+  if (!Object.keys(placed).length) delete next.placed
+  return next
 }
 
 function remember(state: SalonState): Look[] {
@@ -178,9 +223,9 @@ function withShape(strand: Strand, shape: HairShape | undefined): Strand {
   return next
 }
 
-// Resizes a strand without losing the brushed pose, which scales with the hair.
+// Resizes a strand without losing the brushed pose, which goes with the hair.
 function resized(strand: Strand, index: number, length: number): Strand {
-  return withShape({ ...strand, length }, scaleShape(strand.shape, strandReach(length, index) / strandReach(strand.length, index)))
+  return withShape({ ...strand, length }, resizeShape(strand.shape, index, strandReach(strand.length, index), strandReach(length, index)))
 }
 
 // Hair cut right down to the scalp is gone, and its brushed pose, soap, water, curls, dyed tips and glitter go with it.
@@ -245,7 +290,7 @@ export function applyHairLengths(look: Look, edits: HairLengthEdit[]): Look {
   const hair = look.hair.map((strand, index) => {
     const edit = lengths.get(index)
     if (!edit) return strand
-    const length = Math.max(MIN_LENGTH, Math.min(1, edit.length))
+    const length = Math.max(MIN_LENGTH, Math.min(MAX_LENGTH, edit.length))
     if (isBald(length)) {
       if (isBald(strand.length)) return strand
       changed = true
@@ -254,7 +299,7 @@ export function applyHairLengths(look: Look, edits: HairLengthEdit[]): Look {
     const bendX = edit.bendX === undefined ? strand.bendX : Math.max(HAIR_BEND_LIMITS.minX, Math.min(HAIR_BEND_LIMITS.maxX, edit.bendX))
     const bendY = edit.bendY === undefined ? strand.bendY : Math.max(HAIR_BEND_LIMITS.minY, Math.min(HAIR_BEND_LIMITS.maxY, edit.bendY))
     const shape = edit.shape === undefined
-      ? scaleShape(strand.shape, strandReach(length, index) / strandReach(strand.length, index))
+      ? resizeShape(strand.shape, index, strandReach(strand.length, index), strandReach(length, index))
       : normalizeShape(edit.shape)
     if (length === strand.length && bendX === strand.bendX && bendY === strand.bendY && shape === strand.shape) return strand
     changed = true
@@ -311,9 +356,19 @@ export function salonReducer(state: SalonState, action: SalonAction): SalonState
     return { ...state, looks: { ...state.looks, [state.active]: createLook(state.active) }, history: remember(state) }
   }
   if (action.type === 'wear') {
-    const items: readonly string[] = WEARABLES[action.slot] ?? []
+    const items = Object.hasOwn(DRESS_UP, action.slot) ? DRESS_UP[action.slot] : []
     if (!items.includes(action.item) || current[action.slot] === action.item) return state
-    return { ...state, looks: { ...state.looks, [state.active]: { ...current, [action.slot]: action.item } }, history: remember(state) }
+    const worn = { ...current, [action.slot]: action.item }
+    // Something taken off goes back to its usual place when it is put on again.
+    const next = action.item === 'none' && Object.hasOwn(WEARABLES, action.slot) ? movedBack(worn, action.slot as WearSlot) : worn
+    return { ...state, looks: { ...state.looks, [state.active]: next }, history: remember(state) }
+  }
+  if (action.type === 'place') {
+    if (!Object.hasOwn(WEARABLES, action.slot) || current[action.slot] === 'none' || !Number.isFinite(action.x) || !Number.isFinite(action.y)) return state
+    const spot = { x: round1(Math.max(0, Math.min(STAGE.width, action.x))), y: round1(Math.max(0, Math.min(STAGE.height, action.y))) }
+    const before = current.placed?.[action.slot]
+    if (before && before.x === spot.x && before.y === spot.y) return state
+    return { ...state, looks: { ...state.looks, [state.active]: { ...current, placed: { ...current.placed, [action.slot]: spot } } }, history: remember(state) }
   }
   if (action.type === 'clips') {
     if (action.clips.length > MAX_CLIPS || !action.clips.every(isClip) || sameClips(action.clips, current.clips)) return state
@@ -358,8 +413,16 @@ export function salonReducer(state: SalonState, action: SalonAction): SalonState
     // Bare scalp has no hair to style, but growing always brings hair back.
     if (!selected.has(i) || (isBald(strand.length) && action.tool !== 'grow')) return strand
     switch (action.tool) {
-      case 'snip': return resized(strand, i, Math.min(strand.length, Math.max(0.08, strand.length - 0.2)))
-      case 'grow': return resized(strand, i, Math.min(1, strand.length + 0.2))
+      case 'snip': {
+        // Long hair is trimmed back to full length before the standing hair gets any shorter.
+        const shorter = strand.length > 1 ? Math.max(1, strand.length - FALLEN_LENGTH_PER_PRESS) : strand.length - LENGTH_PER_PRESS
+        return resized(strand, i, Math.min(strand.length, Math.max(0.08, shorter)))
+      }
+      case 'grow': {
+        // Standing hair grows to full height before it starts to fall.
+        const longer = strand.length >= 1 ? strand.length + FALLEN_LENGTH_PER_PRESS : Math.min(1, strand.length + LENGTH_PER_PRESS)
+        return resized(strand, i, Math.min(MAX_LENGTH, longer))
+      }
       case 'curl': return { ...strand, curl: Math.min(1, strand.curl + CURL_PER_PRESS) }
       case 'brush':
       case 'comb': return { ...strand, curl: 0, flow: Math.max(-1, Math.min(1, action.direction)) }

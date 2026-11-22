@@ -1,15 +1,15 @@
 import { useEffect, useRef, useState } from 'react'
 import type { Dispatch, PointerEvent } from 'react'
-import type { ClipKind, DyeMode, HairAirEdit, HairCurlEdit, HairLengthEdit, Look, SalonAction, Tool } from '../game/model'
+import type { ClipKind, DyeMode, HairAirEdit, HairCurlEdit, HairLengthEdit, Look, SalonAction, Tool, WearSlot } from '../game/model'
 import { applyHairAir, applyHairCurl, applyHairLengths, CHARACTERS, MAX_CLIPS, STAGE, STRAND_COUNT } from '../game/model'
-import { clipAt, clipPosition, clipUnder, isWearable, nextClipSpot } from '../game/accessories'
+import { canWearAt, clipAt, clipPosition, clipUnder, isWearable, nextClipSpot, wornSpot, wornUnder } from '../game/accessories'
 import { hitHairStroke, strandPoints } from '../game/hair'
 import type { Point } from '../game/hair'
 import { Capybara } from './Capybara'
 import type { Mood } from './Capybara'
 import type { Sound } from '../game/audio'
 import { CLIP_LABELS } from './Accessories'
-import type { LiftedClip } from './Accessories'
+import type { Lifted } from './Accessories'
 import { SalonRoom } from './SalonRoom'
 import { Icon } from './Icon'
 import { useHairMotion } from './useHairMotion'
@@ -78,12 +78,13 @@ interface HairGesture {
   sprayer: HairSprayer | null
 }
 
-// A clip being carried by a finger. It only moves if the finger really slides, so a tap leaves it be.
-interface ClipDrag {
+// A clip (by its number), or the hat, glasses or headband, being carried by a finger. It only moves if the finger
+// really slides, so a tap leaves it be.
+interface Carried {
   id: number
-  index: number
+  item: number | WearSlot
   from: Point
-  // From the finger to the middle of the clip, so it doesn't jump under the finger when picked up.
+  // From the finger to where the thing sits, so it doesn't jump under the finger when picked up.
   shift: Point
   moved: boolean
 }
@@ -92,7 +93,7 @@ const CLIP_SLIDE = 6
 const REACTION_SOUNDS: Record<Reaction, Sound> = { 'poked-left': 'poke', 'poked-right': 'poke', sneeze: 'sneeze', boop: 'boing', ticklish: 'giggle' }
 
 // A finger on the capybara that might turn out to be a poke or a tickle. `busy` means the press already put on or
-// picked up a clip, so lifting it isn't a poke.
+// picked up a clip, or moved something being worn, so lifting it isn't a poke.
 interface Feeling {
   id: number
   body: BodyTouch
@@ -102,11 +103,11 @@ interface Feeling {
 export function Studio({ look, tool, color, dye, decorating, clip, dispatch, onStyle, canUndo }: Props) {
   const svgRef = useRef<SVGSVGElement>(null)
   const gesture = useRef<HairGesture | null>(null)
-  const clipDrag = useRef<ClipDrag | null>(null)
+  const carried = useRef<Carried | null>(null)
   const feeling = useRef<Feeling | null>(null)
   const reacting = useRef<{ reaction: Reaction; until: number } | null>(null)
   const [beat, setBeat] = useState(0)
-  const [lifted, setLifted] = useState<LiftedClip | null>(null)
+  const [lifted, setLifted] = useState<Lifted | null>(null)
   const { motion, offsets, animate, reset, publish } = useHairMotion(editOnFrame)
   const [mood, setMood] = useState<Mood>('calm')
   const [dragging, setDragging] = useState(false)
@@ -118,7 +119,7 @@ export function Studio({ look, tool, color, dye, decorating, clip, dispatch, onS
   const clipName = CLIP_LABELS[clip].toLowerCase()
   const hint = !decorating ? TOOL_HINTS[tool]
     : full ? 'That’s a lot of clips! Drag one off to make room.'
-      : `Tap anywhere on ${friend.name} to add a ${clipName}. Drag clips to move them, or off to take them off.`
+      : `Tap anywhere on ${friend.name} to add a ${clipName}. Drag anything ${friend.name} is wearing to move it, or off to take it off.`
   useEffect(() => () => { if (timer.current) clearTimeout(timer.current) }, [])
   useEffect(() => {
     const current = gesture.current
@@ -128,8 +129,8 @@ export function Studio({ look, tool, color, dye, decorating, clip, dispatch, onS
     current?.sprayer?.stop()
     gesture.current = null
     if (current && svgRef.current?.hasPointerCapture(current.id)) svgRef.current.releasePointerCapture(current.id)
-    const held = clipDrag.current
-    clipDrag.current = null
+    const held = carried.current
+    carried.current = null
     if (held && svgRef.current?.hasPointerCapture(held.id)) svgRef.current.releasePointerCapture(held.id)
     feeling.current = null
     reset()
@@ -367,57 +368,83 @@ export function Studio({ look, tool, color, dye, decorating, clip, dispatch, onS
     reactToStyling()
   }
 
-  // Picks up the clip under the finger, or puts a new one on.
-  function startDecorating(event: PointerEvent<SVGSVGElement>, point: Point) {
-    const index = clipUnder(look, point, offsets)
-    if (index < 0) {
-      // Tapping an eye or the nose pokes it instead of putting a clip there.
-      if (isWearable(look, point, offsets) && !isFaceSpot(spotAt(point))) {
-        addClip(point)
-        if (feeling.current) feeling.current.busy = true
-      }
-      return
-    }
+  // Puts a clip on where the finger tapped. Tapping an eye or the nose pokes it instead, so nothing goes on there.
+  function tapToClip(point: Point): boolean {
+    if (!isWearable(look, point, offsets) || isFaceSpot(spotAt(point))) return false
+    addClip(point)
     if (feeling.current) feeling.current.busy = true
-    event.currentTarget.setPointerCapture(event.pointerId)
-    const spot = clipPosition(look, look.clips[index], offsets)
-    clipDrag.current = { id: event.pointerId, index, from: point, shift: { x: spot.x - point.x, y: spot.y - point.y }, moved: false }
-    setLifted({ index, x: spot.x, y: spot.y, away: false })
+    return true
   }
 
-  function carriedTo(held: ClipDrag, point: Point): Point {
+  // Picks up the clip under the finger, or gets ready to carry the hat, glasses or headband if the finger slides, or
+  // puts a new clip on.
+  function startDecorating(event: PointerEvent<SVGSVGElement>, point: Point) {
+    const index = clipUnder(look, point, offsets)
+    const slot = index < 0 ? wornUnder(look, point) : null
+    if (index < 0 && !slot) {
+      tapToClip(point)
+      return
+    }
+    event.currentTarget.setPointerCapture(event.pointerId)
+    const spot = slot ? wornSpot(look, slot) : clipPosition(look, look.clips[index], offsets)
+    carried.current = { id: event.pointerId, item: slot ?? index, from: point, shift: { x: spot.x - point.x, y: spot.y - point.y }, moved: false }
+    if (slot) return
+    if (feeling.current) feeling.current.busy = true
+    setLifted({ item: index, x: spot.x, y: spot.y, away: false })
+  }
+
+  function fitsAt(item: number | WearSlot, spot: Point): boolean {
+    return typeof item === 'number' ? isWearable(look, spot, offsets) : canWearAt(look, item, spot, offsets)
+  }
+
+  function carriedTo(held: Carried, point: Point): Point {
     return {
       x: Math.max(0, Math.min(STAGE.width, point.x + held.shift.x)),
       y: Math.max(0, Math.min(STAGE.height, point.y + held.shift.y)),
     }
   }
 
-  function moveClip(point: Point) {
-    const held = clipDrag.current
+  function moveCarried(point: Point) {
+    const held = carried.current
     if (!held) return
-    if (Math.hypot(point.x - held.from.x, point.y - held.from.y) > CLIP_SLIDE) held.moved = true
+    if (!held.moved && Math.hypot(point.x - held.from.x, point.y - held.from.y) > CLIP_SLIDE) {
+      held.moved = true
+      if (feeling.current) feeling.current.busy = true
+    }
     if (!held.moved) return
     const spot = carriedTo(held, point)
-    setLifted({ index: held.index, ...spot, away: !isWearable(look, spot, offsets) })
+    setLifted({ item: held.item, ...spot, away: !fitsAt(held.item, spot) })
   }
 
-  // Lets go of a carried clip: it clips on where it is dropped, or comes off if dropped away from the capybara.
-  function dropClip(point: Point | null) {
-    const held = clipDrag.current
+  // Lets go of whatever is being carried: it goes on where it is dropped, or comes off if dropped away from the
+  // capybara. A tap on the hat, glasses or headband that didn't carry it puts a clip there or pokes, as it would
+  // anywhere else.
+  function dropCarried(point: Point | null, poked: BodySpot | null = null) {
+    const held = carried.current
     if (!held) return
-    clipDrag.current = null
+    carried.current = null
     setLifted(null)
     if (svgRef.current?.hasPointerCapture(held.id)) svgRef.current.releasePointerCapture(held.id)
-    if (!point || !held.moved) return
+    if (!point) return
+    const item = held.item
+    if (!held.moved) {
+      if (typeof item !== 'number' && !tapToClip(point) && poked) react(poked, false)
+      return
+    }
     const spot = carriedTo(held, point)
-    const others = look.clips.filter((_, index) => index !== held.index)
-    // A moved clip goes on top of the others.
-    dispatch({ type: 'clips', clips: isWearable(look, spot, offsets) ? [...others, clipAt(look, look.clips[held.index].kind, spot)] : others })
+    const fits = fitsAt(item, spot)
+    if (typeof item === 'number') {
+      const others = look.clips.filter((_, index) => index !== item)
+      // A moved clip goes on top of the others.
+      dispatch({ type: 'clips', clips: fits ? [...others, clipAt(look, look.clips[item].kind, spot)] : others })
+    } else {
+      dispatch(fits ? { type: 'place', slot: item, ...spot } : { type: 'wear', slot: item, item: 'none' })
+    }
     reactToStyling()
   }
 
   function start(event: PointerEvent<SVGSVGElement>) {
-    if (gesture.current || clipDrag.current || !event.isPrimary || event.button !== 0) return
+    if (gesture.current || carried.current || !event.isPrimary || event.button !== 0) return
     const point = pointFromEvent(event)
     if (!point) return
     feeling.current = { id: event.pointerId, body: new BodyTouch(point, event.timeStamp), busy: false }
@@ -476,8 +503,8 @@ export function Studio({ look, tool, color, dye, decorating, clip, dispatch, onS
 
   const finishRef = useRef(finish)
   useEffect(() => { finishRef.current = finish })
-  const dropRef = useRef(dropClip)
-  useEffect(() => { dropRef.current = dropClip })
+  const dropRef = useRef(dropCarried)
+  useEffect(() => { dropRef.current = dropCarried })
   useEffect(() => {
     const release = () => { finishRef.current(); dropRef.current(null) }
     const hidden = () => { if (document.visibilityState === 'hidden') release() }
@@ -505,7 +532,7 @@ export function Studio({ look, tool, color, dye, decorating, clip, dispatch, onS
 
   function restore(type: 'undo' | 'reset') {
     finish()
-    dropClip(null)
+    dropCarried(null)
     reset()
     dispatch({ type })
   }
@@ -529,12 +556,12 @@ export function Studio({ look, tool, color, dye, decorating, clip, dispatch, onS
       hairOffsets={offsets}
       airflow={airflow ?? undefined}
       spray={spray ?? undefined}
-      liftedClip={lifted ?? undefined}
+      lifted={lifted ?? undefined}
       onPointerDown={start}
       onPointerMove={(event) => {
-        if (clipDrag.current?.id === event.pointerId) {
+        if (carried.current?.id === event.pointerId) {
           const point = pointFromEvent(event)
-          if (point) moveClip(point)
+          if (point) moveCarried(point)
           return
         }
         const styling = gesture.current?.id === event.pointerId
@@ -555,8 +582,8 @@ export function Studio({ look, tool, color, dye, decorating, clip, dispatch, onS
       onPointerUp={(event) => {
         const point = pointFromEvent(event)
         const poked = letGo(event.pointerId, point, event.timeStamp)
-        if (clipDrag.current?.id === event.pointerId) {
-          dropClip(point)
+        if (carried.current?.id === event.pointerId) {
+          dropCarried(point, poked)
           return
         }
         const current = gesture.current?.id === event.pointerId ? gesture.current : null
@@ -568,12 +595,12 @@ export function Studio({ look, tool, color, dye, decorating, clip, dispatch, onS
       }}
       onPointerCancel={(event) => {
         letGo(event.pointerId, null, event.timeStamp)
-        if (clipDrag.current?.id === event.pointerId) dropClip(null)
+        if (carried.current?.id === event.pointerId) dropCarried(null)
         if (gesture.current?.id === event.pointerId) finish()
       }}
       onLostPointerCapture={(event) => {
         letGo(event.pointerId, null, event.timeStamp)
-        if (clipDrag.current?.id === event.pointerId) dropClip(null)
+        if (carried.current?.id === event.pointerId) dropCarried(null)
         if (gesture.current?.id === event.pointerId) finish()
       }}
       onKeyDown={(event) => {

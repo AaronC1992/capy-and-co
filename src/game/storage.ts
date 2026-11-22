@@ -1,8 +1,8 @@
-import { CHARACTERS, createLooks, DEFAULT_OUTFIT, GLASSES, HAIR_BEND_LIMITS, HAIR_GROUP_COUNT, HATS, HEADBANDS, HEX_COLOR, isClip, MAX_CLIPS, OUTFITS, STRAND_COUNT } from './model'
-import { isHairShape, MIN_LENGTH } from './hairLayout'
+import { CHARACTERS, createLooks, DEFAULT_OUTFIT, GLASSES, HAIR_BEND_LIMITS, HAIR_GROUP_COUNT, HATS, HEADBANDS, HEX_COLOR, isClip, MAKEUP, MAX_CLIPS, OUTFITS, STAGE, STRAND_COUNT, WEARABLES } from './model'
+import { isHairShape, MAX_LENGTH, MIN_LENGTH } from './hairLayout'
 import { isScene } from './photoBooth'
 import type { Scene } from './photoBooth'
-import type { CharacterId, Clip, Look, Looks, Outfit, Strand } from './model'
+import type { CharacterId, Clip, Look, Looks, MakeupSlot, Outfit, Strand } from './model'
 
 export const STORAGE_KEY = 'capy-and-co:v1'
 export const MAX_PHOTOS = 12
@@ -22,9 +22,11 @@ const LEGACY_CLIPS: Partial<Record<LegacyAccessory, Clip>> = {
   cherries: { kind: 'cherries', x: 303, y: 165 },
   star: { kind: 'star', x: 303, y: 178 },
 }
-type Wearables = Pick<Look, 'hat' | 'glasses' | 'headband' | 'clips'>
+type Wearables = Pick<Look, 'hat' | 'glasses' | 'headband' | 'clips' | 'placed'>
 type StoredWear = (Wearables & { accessory?: undefined }) | ({ accessory: LegacyAccessory } & Partial<Record<keyof Wearables, undefined>>)
-type StoredLook = Omit<Look, 'hair' | 'outfit' | keyof Wearables> & { outfit?: Outfit; hair: StoredStrand[] } & StoredWear
+// Saves from before makeup have none on.
+type StoredLook = Omit<Look, 'hair' | 'outfit' | keyof Wearables | MakeupSlot> & Partial<Pick<Look, MakeupSlot>> & { outfit?: Outfit; hair: StoredStrand[] } & StoredWear
+const MAKEUP_SLOTS = Object.keys(MAKEUP) as MakeupSlot[]
 type StoredGame = Omit<SavedGame, 'version' | 'looks' | 'photos'> & {
   version: 1 | 2 | 3
   looks: Record<CharacterId, StoredLook>
@@ -46,8 +48,12 @@ function isCharacter(value: unknown): value is CharacterId {
   return CHARACTERS.some((friend) => friend.id === value)
 }
 
+function isBoundedNumber(value: unknown, min: number, max: number): boolean {
+  return typeof value === 'number' && Number.isFinite(value) && value >= min && value <= max
+}
+
 function isOptionalBoundedNumber(value: unknown, min: number, max: number): boolean {
-  return value === undefined || (typeof value === 'number' && Number.isFinite(value) && value >= min && value <= max)
+  return value === undefined || isBoundedNumber(value, min, max)
 }
 
 function isOptionalBoolean(value: unknown): boolean {
@@ -58,21 +64,33 @@ function isHexColor(value: unknown): boolean {
   return typeof value === 'string' && HEX_COLOR.test(value)
 }
 
+// Where moved things sit: only spots on the picture, for things that are being worn.
+function isPlaced(value: Record<string, unknown>): boolean {
+  const placed = value.placed
+  if (placed === undefined) return true
+  return isRecord(placed) && !Array.isArray(placed) && Object.entries(placed).every(([slot, spot]) => Object.hasOwn(WEARABLES, slot) && value[slot] !== 'none'
+    && isRecord(spot) && isBoundedNumber(spot.x, 0, STAGE.width) && isBoundedNumber(spot.y, 0, STAGE.height))
+}
+
 function isWorn(value: Record<string, unknown>): boolean {
   if (value.accessory !== undefined) {
     return LEGACY_ACCESSORIES.some((item) => item === value.accessory)
-      && value.hat === undefined && value.glasses === undefined && value.headband === undefined && value.clips === undefined
+      && value.hat === undefined && value.glasses === undefined && value.headband === undefined && value.clips === undefined && value.placed === undefined
   }
   return HATS.some((item) => item === value.hat) && GLASSES.some((item) => item === value.glasses) && HEADBANDS.some((item) => item === value.headband)
-    && Array.isArray(value.clips) && value.clips.length <= MAX_CLIPS && value.clips.every(isClip)
+    && Array.isArray(value.clips) && value.clips.length <= MAX_CLIPS && value.clips.every(isClip) && isPlaced(value)
+}
+
+function isMadeUp(value: Record<string, unknown>): boolean {
+  return MAKEUP_SLOTS.every((slot) => value[slot] === undefined || MAKEUP[slot].some((item) => item === value[slot]))
 }
 
 export function isLook(value: unknown, legacy = false): value is StoredLook {
-  if (!isRecord(value) || !isCharacter(value.character) || !isWorn(value)) return false
+  if (!isRecord(value) || !isCharacter(value.character) || !isWorn(value) || !isMadeUp(value)) return false
   if (value.outfit !== undefined && !OUTFITS.some((o) => o === value.outfit)) return false
   return Array.isArray(value.hair) && (value.hair.length === STRAND_COUNT || (legacy && value.hair.length === HAIR_GROUP_COUNT)) && value.hair.every((strand: unknown) =>
     isRecord(strand)
-    && typeof strand.length === 'number' && Number.isFinite(strand.length) && strand.length >= MIN_LENGTH && strand.length <= 1
+    && typeof strand.length === 'number' && Number.isFinite(strand.length) && strand.length >= MIN_LENGTH && strand.length <= MAX_LENGTH
     && isHexColor(strand.color)
     && (typeof strand.curl === 'boolean' || (typeof strand.curl === 'number' && Number.isFinite(strand.curl) && strand.curl >= 0 && strand.curl <= 1))
     && typeof strand.flow === 'number' && Number.isFinite(strand.flow) && strand.flow >= -1 && strand.flow <= 1
@@ -111,7 +129,13 @@ function readWearables(look: StoredLook): Wearables {
     const clip = LEGACY_CLIPS[look.accessory]
     return { hat: look.accessory === 'crown' ? 'crown' : 'none', glasses: 'none', headband: 'none', clips: clip ? [{ ...clip }] : [] }
   }
-  return { hat: look.hat, glasses: look.glasses, headband: look.headband, clips: look.clips.map((clip) => ({ ...clip })) }
+  const wearables: Wearables = { hat: look.hat, glasses: look.glasses, headband: look.headband, clips: look.clips.map((clip) => ({ ...clip })) }
+  if (look.placed) wearables.placed = copyPlaced(look.placed)
+  return wearables
+}
+
+function copyPlaced(placed: NonNullable<Look['placed']>): NonNullable<Look['placed']> {
+  return Object.fromEntries(Object.entries(placed).map(([slot, spot]) => [slot, { x: spot.x, y: spot.y }]))
 }
 
 function readLook(look: StoredLook): Look {
@@ -122,6 +146,10 @@ function readLook(look: StoredLook): Look {
     character: look.character,
     outfit: look.outfit ?? DEFAULT_OUTFIT,
     ...readWearables(look),
+    lashes: look.lashes ?? 'none',
+    eyeshadow: look.eyeshadow ?? 'none',
+    blush: look.blush ?? 'none',
+    lipstick: look.lipstick ?? 'none',
     hair: hair.map((strand) => ({ ...strand, curl: readCurl(strand.curl) })),
   }
 }
@@ -155,6 +183,7 @@ export function saveGame(storage: StoragePort, data: SavedGame): string | null {
 
 export function addPhoto(photos: Photo[], look: Look, id: string, date: string, scene?: Scene): Photo[] {
   const photo: Photo = { id, createdAt: date, look: { ...look, hair: look.hair.map((strand) => ({ ...strand })), clips: look.clips.map((clip) => ({ ...clip })) } }
+  if (look.placed) photo.look.placed = copyPlaced(look.placed)
   if (scene) photo.scene = { ...scene, stickers: scene.stickers.map((sticker) => ({ ...sticker })) }
   return [photo, ...photos].slice(0, MAX_PHOTOS)
 }

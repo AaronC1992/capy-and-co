@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { cutHairStroke, GROWTH_PER_SECOND, HairGrowth } from './hairEditing'
 import { strandPoints } from './hair'
-import { BALD_REACH, isBald, MIN_LENGTH, strandReach } from './hairLayout'
+import { BALD_REACH, isBald, MAX_LENGTH, MIN_LENGTH, strandReach } from './hairLayout'
 import { applyHairLengths, createLook } from './model'
 import type { Look } from './model'
 
@@ -39,6 +39,29 @@ describe('position-based scissors', () => {
     expect(applyHairLengths(cut, cutHairStroke(cut, point, point))).toBe(cut)
     const higher = applyHairLengths(cut, cutHairStroke(cut, { x: 240, y: 120 }, { x: 280, y: 120 }))
     expect(higher.hair.every((strand, index) => strand.length <= cut.hair[index].length)).toBe(true)
+  })
+
+  it('cuts floor-length hair right where the scissors cross the falling lock, once', () => {
+    const original = createLook('mochi')
+    const long = applyHairLengths(original, original.hair.map((_, index) => ({ index, length: MAX_LENGTH })))
+    const contact = strandPoints(long.hair[0], 0)[16]
+    const stroke = [{ x: contact.x - 12, y: contact.y }, { x: contact.x + 12, y: contact.y }] as const
+    const cut = applyHairLengths(long, cutHairStroke(long, ...stroke))
+    expect(cut.hair[0].length).toBeLessThan(MAX_LENGTH)
+    expect(cut.hair[0].length).toBeGreaterThan(1)
+    const tip = strandPoints(cut.hair[0], 0)[24]
+    expect(Math.hypot(tip.x - contact.x, tip.y - contact.y)).toBeLessThan(2)
+    expect(cut.hair[5]).toBe(long.hair[5])
+    expect(applyHairLengths(cut, cutHairStroke(cut, ...stroke))).toBe(cut)
+  })
+
+  it('cuts floor-length hair back to standing hair when the scissors cross it above the head', () => {
+    const original = createLook('mochi')
+    const long = applyHairLengths(original, original.hair.map((_, index) => ({ index, length: MAX_LENGTH })))
+    const contact = strandPoints(long.hair[5], 5)[4]
+    const cut = applyHairLengths(long, cutHairStroke(long, { x: contact.x - 6, y: contact.y }, { x: contact.x + 6, y: contact.y }))
+    expect(cut.hair[5].length).toBeLessThan(1)
+    expect(Math.abs(strandPoints(cut.hair[5], 5)[24].y - contact.y)).toBeLessThan(2)
   })
 
   it('cuts downward-growing side locks correctly and leaves room/face strokes alone', () => {
@@ -162,11 +185,13 @@ describe('hold-to-grow', () => {
     }
   })
 
-  it('grows quickly enough that a held finger brings hair to full length within a few seconds', () => {
+  it('grows quickly enough that a held finger brings hair to full height in a second and to the floor in a few more', () => {
     expect(GROWTH_PER_SECOND).toBeGreaterThanOrEqual(0.4)
     const original = createLook('mochi')
     const growth = new HairGrowth(original, strandPoints(original.hair[5], 5)[15], 0)
-    expect(hold(growth, original, 0, 2500).hair[5].length).toBe(1)
+    const standing = hold(growth, original, 0, 1000)
+    expect(standing.hair[5].length).toBeGreaterThanOrEqual(1)
+    expect(hold(growth, standing, 1000, 6000).hair[5].length).toBe(MAX_LENGTH)
   })
 
   it('moves growth to the new finger area and stops growing abandoned locks', () => {
@@ -200,10 +225,10 @@ describe('hold-to-grow', () => {
     expect(isBald(sprouting.hair[5].length)).toBe(false)
     expect(sprouting.hair[5].length).toBeCloseTo(MIN_LENGTH + GROWTH_PER_SECOND * 0.2, 6)
     expect(sprouting.hair[5].color).toBe(bald.hair[5].color)
-    // From bare scalp to full length in under two seconds of holding.
+    // From bare scalp to full height in under two seconds of holding, and it keeps on growing.
     const regrown = hold(growth, sprouting, 200, 1900)
-    expect(regrown.hair[5].length).toBe(1)
-    expect(growth.canGrow(regrown)).toBe(false)
+    expect(regrown.hair[5].length).toBeGreaterThanOrEqual(1)
+    expect(growth.canGrow(regrown)).toBe(true)
     expect(regrown.hair[0]).toBe(bald.hair[0])
   })
 
@@ -232,12 +257,12 @@ describe('hold-to-grow', () => {
     const stalled = applyHairLengths(original, growth.hold(original, 5000))
     expect(stalled.hair[5].length - original.hair[5].length).toBeCloseTo(GROWTH_PER_SECOND * 0.05, 6)
     const full = hold(growth, stalled, 5000, 10000)
-    expect(full.hair[5].length).toBe(1)
+    expect(full.hair[5].length).toBe(MAX_LENGTH)
     expect(growth.hold(full, 10020)).toEqual([])
-    const almostFull = { ...full, hair: full.hair.map((strand, index) => ({ ...strand, length: index === 5 ? 0.9999999 : 1 })) }
+    const almostFull = { ...full, hair: full.hair.map((strand, index) => ({ ...strand, length: index === 5 ? MAX_LENGTH - 0.0000001 : MAX_LENGTH })) }
     const lastBit = new HairGrowth(almostFull, strandPoints(almostFull.hair[5], 5)[15], 0)
     const finished = applyHairLengths(almostFull, lastBit.hold(almostFull, 16))
-    expect(finished.hair[5].length).toBe(1)
+    expect(finished.hair[5].length).toBe(MAX_LENGTH)
     expect(lastBit.canGrow(finished)).toBe(false)
   })
 })

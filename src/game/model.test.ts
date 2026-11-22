@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { createLooks, DEFAULT_OUTFIT, GLITTER, HAIR_GROUP_COUNT, MAX_CLIPS, OUTFITS, RAINBOW, salonReducer, STRAND_COUNT } from './model'
 import type { Clip, DyeMode, Outfit, SalonAction, SalonState, Tool } from './model'
 import { hitHair, hitHairStroke, strandPoints } from './hair'
-import { isBald, MIN_LENGTH } from './hairLayout'
+import { HAIR_SHAPE_LIMIT, isBald, MAX_LENGTH, MIN_LENGTH } from './hairLayout'
 
 const initial = (): SalonState => ({ active: 'mochi', looks: createLooks(), history: [] })
 const style = (tool: Tool, strands = [3], checkpoint = true): SalonAction => ({
@@ -47,7 +47,7 @@ describe('salon gameplay', () => {
     expect(salonReducer(posed, { type: 'undo' }).looks).toEqual(state.looks)
     expect('shape' in salonReducer(posed, { type: 'air', edits: [{ index: 5, shape: null }], checkpoint: false }).looks.mochi.hair[5]).toBe(false)
     const huge = salonReducer(state, { type: 'air', edits: [{ index: 5, shape: blown.map(() => 9000) }], checkpoint: true })
-    expect(huge.looks.mochi.hair[5].shape?.every((value) => value === 300)).toBe(true)
+    expect(huge.looks.mochi.hair[5].shape?.every((value) => value === HAIR_SHAPE_LIMIT)).toBe(true)
     for (const invalid of [[1, 2, 3], blown.map(() => Number.NaN), 'blown']) {
       expect(salonReducer(state, { type: 'air', edits: [{ index: 5, shape: invalid as number[] }], checkpoint: true })).toBe(state)
     }
@@ -80,8 +80,14 @@ describe('salon gameplay', () => {
     let state = initial()
     for (let i = 0; i < 20; i++) state = salonReducer(state, style('snip'))
     expect(state.looks.mochi.hair[3].length).toBe(0.08)
-    for (let i = 0; i < 20; i++) state = salonReducer(state, style('grow'))
+    for (let i = 0; i < 5; i++) state = salonReducer(state, style('grow'))
+    // Standing hair stops at full height before it starts to fall...
     expect(state.looks.mochi.hair[3].length).toBe(1)
+    for (let i = 0; i < 20; i++) state = salonReducer(state, style('grow'))
+    // ...and then grows all the way to the floor.
+    expect(state.looks.mochi.hair[3].length).toBe(MAX_LENGTH)
+    state = salonReducer(state, style('snip'))
+    expect(state.looks.mochi.hair[3].length).toBe(MAX_LENGTH - 0.5)
   })
   it('brushes away curls in the swipe direction', () => {
     const curled = salonReducer(initial(), style('curl'))
@@ -143,7 +149,7 @@ describe('salon gameplay', () => {
     expect(salonReducer(posed, style('soap', [5], false)).looks.mochi.hair[5].shape).toEqual(shape)
     expect('shape' in salonReducer(posed, { type: 'pose', locks: [{ index: 5, flow: 0.3, shape: null }], checkpoint: false }).looks.mochi.hair[5]).toBe(false)
     const huge = salonReducer(initial(), { type: 'pose', locks: [{ index: 5, flow: 0.3, shape: shape.map(() => 9000) }], checkpoint: true })
-    expect(huge.looks.mochi.hair[5].shape?.every((value) => value === 300)).toBe(true)
+    expect(huge.looks.mochi.hair[5].shape?.every((value) => value === HAIR_SHAPE_LIMIT)).toBe(true)
     for (const invalid of [[1, 2, 3], shape.map(() => Number.NaN), 'bent']) {
       expect(salonReducer(initial(), { type: 'pose', locks: [{ index: 5, flow: 0.3, shape: invalid as number[] }], checkpoint: true }).looks.mochi.hair[5].shape).toBeUndefined()
     }
@@ -207,7 +213,7 @@ describe('salon gameplay', () => {
     expect(salonReducer(state, { type: 'lengths', edits: [{ index: 5, length: state.looks.mochi.hair[5].length }], checkpoint: true })).toBe(state)
     const bounded = salonReducer(state, { type: 'lengths', edits: [{ index: 4, length: -5 }, { index: 5, length: 6 }], checkpoint: true })
     expect(bounded.looks.mochi.hair[4].length).toBe(MIN_LENGTH)
-    expect(bounded.looks.mochi.hair[5].length).toBe(1)
+    expect(bounded.looks.mochi.hair[5].length).toBe(MAX_LENGTH)
   })
   it('keeps looks separate when switching friends and clears cross-friend undo', () => {
     const painted = salonReducer(initial(), style('color'))
@@ -400,6 +406,39 @@ describe('hats, glasses and clips', () => {
     expect(salonReducer(dressed, { type: 'wear', slot: 'hat', item: 'beanie' })).toBe(dressed)
     expect(salonReducer(dressed, { type: 'wear', slot: 'glasses', item: 'crown' })).toBe(dressed)
     expect(salonReducer(dressed, { type: 'undo' }).looks.mochi).toMatchObject({ glasses: 'shades', headband: 'none' })
+  })
+  it('moves a worn hat, glasses or headband as its own undo, keeps the spot for the next one tried on, and forgets it when taken off', () => {
+    const dressed = salonReducer(salonReducer(initial(), { type: 'wear', slot: 'hat', item: 'crown' }), { type: 'wear', slot: 'glasses', item: 'round' })
+    const moved = salonReducer(dressed, { type: 'place', slot: 'hat', x: 312.04, y: 140 })
+    expect(moved.looks.mochi.placed).toEqual({ hat: { x: 312, y: 140 } })
+    expect(moved.history).toHaveLength(dressed.history.length + 1)
+    expect(salonReducer(moved, { type: 'place', slot: 'hat', x: 312, y: 140 })).toBe(moved)
+    expect(salonReducer(moved, { type: 'place', slot: 'hat', x: -40, y: 900 }).looks.mochi.placed?.hat).toEqual({ x: 0, y: 520 })
+    for (const bad of [{ slot: 'headband', x: 200, y: 200 }, { slot: 'outfit', x: 200, y: 200 }, { slot: 'hat', x: Number.NaN, y: 200 }]) {
+      expect(salonReducer(moved, { type: 'place', ...bad } as SalonAction)).toBe(moved)
+    }
+    const both = salonReducer(moved, { type: 'place', slot: 'glasses', x: 250, y: 180 })
+    const swapped = salonReducer(both, { type: 'wear', slot: 'hat', item: 'tophat' })
+    expect(swapped.looks.mochi).toMatchObject({ hat: 'tophat', placed: { hat: { x: 312, y: 140 }, glasses: { x: 250, y: 180 } } })
+    expect(salonReducer(swapped, { type: 'wear', slot: 'hat', item: 'none' }).looks.mochi.placed).toEqual({ glasses: { x: 250, y: 180 } })
+    const bare = salonReducer(salonReducer(swapped, { type: 'wear', slot: 'hat', item: 'none' }), { type: 'wear', slot: 'glasses', item: 'none' })
+    expect(bare.looks.mochi).not.toHaveProperty('placed')
+    expect(salonReducer(both, { type: 'undo' }).looks.mochi.placed).toEqual({ hat: { x: 312, y: 140 } })
+  })
+  it('puts on one of each kind of makeup and lashes at a time, as its own undo, without moving anything worn', () => {
+    const state = salonReducer(salonReducer(initial(), { type: 'wear', slot: 'hat', item: 'crown' }), { type: 'place', slot: 'hat', x: 300, y: 150 })
+    expect(state.looks.mochi).toMatchObject({ lashes: 'none', eyeshadow: 'none', blush: 'none', lipstick: 'none' })
+    const madeUp = [
+      { slot: 'lashes', item: 'doll' }, { slot: 'eyeshadow', item: 'gold' }, { slot: 'blush', item: 'hearts' }, { slot: 'lipstick', item: 'cherry' }, { slot: 'lipstick', item: 'gloss' },
+    ].reduce((next, change) => salonReducer(next, { type: 'wear', ...change } as SalonAction), state)
+    expect(madeUp.looks.mochi).toMatchObject({ lashes: 'doll', eyeshadow: 'gold', blush: 'hearts', lipstick: 'gloss', placed: { hat: { x: 300, y: 150 } } })
+    expect(madeUp.history).toHaveLength(state.history.length + 5)
+    for (const bad of [{ slot: 'lashes', item: 'crown' }, { slot: 'blush', item: 'rainbow' }, { slot: 'mascara', item: 'long' }, { slot: 'lipstick', item: 'gloss' }]) {
+      expect(salonReducer(madeUp, { type: 'wear', ...bad } as SalonAction)).toBe(madeUp)
+    }
+    const washed = salonReducer(madeUp, { type: 'wear', slot: 'blush', item: 'none' })
+    expect(washed.looks.mochi).toMatchObject({ blush: 'none', lashes: 'doll', placed: { hat: { x: 300, y: 150 } } })
+    expect(salonReducer(washed, { type: 'undo' }).looks.mochi.blush).toBe('hearts')
   })
   it('keeps any number of clips up to the limit, as one undo per change, and turns away broken ones', () => {
     const state = initial()

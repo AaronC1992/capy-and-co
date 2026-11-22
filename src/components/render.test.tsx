@@ -7,11 +7,13 @@ import { Capybara } from './Capybara'
 import type { Mood } from './Capybara'
 import { DressUpPanel } from './DressUpPanel'
 import { CLIP_LABELS, GLASSES_LABELS, HAT_LABELS, HEADBAND_LABELS, WearableIcon } from './Accessories'
+import { BLUSH_LABELS, BlushArt, EYESHADOW_LABELS, EyeshadowArt, LASH_LABELS, LashArt, LIPSTICK_LABELS, LipstickArt, MakeupIcon } from './Makeup'
+import type { Lid, LipShape } from './Makeup'
 import { OUTFIT_LABELS, OutfitIcon } from './Outfit'
 import { mixColor } from '../game/color'
-import { CHARACTERS, CLIP_KINDS, createLook, GLASSES, HATS, HEADBANDS, MAX_CLIPS, OUTFITS, STRAND_COUNT } from '../game/model'
-import type { CharacterId, Clip, Look, Outfit } from '../game/model'
-import { clipAt, nextClipSpot } from '../game/accessories'
+import { BLUSHES, CHARACTERS, CLIP_KINDS, createLook, EYESHADOWS, GLASSES, HATS, HEADBANDS, LASHES, LIPSTICKS, MAKEUP, MAX_CLIPS, OUTFITS, STRAND_COUNT } from '../game/model'
+import type { CharacterId, Clip, Look, MakeupSlot, Outfit } from '../game/model'
+import { clipAt, hatBase, nextClipSpot, usualSpot } from '../game/accessories'
 import { strandPoints } from '../game/hair'
 import { MIN_LENGTH } from '../game/hairLayout'
 import { BoothControls } from './PhotoBooth'
@@ -62,8 +64,30 @@ describe('application initialization and artwork', () => {
     const grip = strandPoints(look.hair[4], 4)[12]
     expect(after).toContain(`data-clip="heart" class="clip" transform="translate(${Math.round(grip.x * 10) / 10} ${Math.round(grip.y * 10) / 10})`)
     expect(after).toContain('data-clip="butterfly" class="clip" transform="translate(250 400)')
-    const carried = renderToStaticMarkup(<Capybara look={look} liftedClip={{ index: 1, x: 480, y: 30, away: true }} />)
+    const carried = renderToStaticMarkup(<Capybara look={look} lifted={{ item: 1, x: 480, y: 30, away: true }} />)
     expect(carried).toContain('data-clip="butterfly" class="clip lifted away" transform="translate(480 30)')
+  })
+  it('draws the hat, glasses and headband where they were moved, glasses pushed up going over the hair, and whatever is carried on top', () => {
+    const look: Look = { ...createLook('mochi'), hat: 'crown', glasses: 'round', headband: 'flowers', clips: [{ kind: 'heart', x: 250, y: 400 }] }
+    const worn = (html: string, slot: string) => html.match(new RegExp(`data-${slot}="[a-z]+" class="([a-z ]+)" pointer-events="none"(?: transform="translate\\(([\\d.-]+) ([\\d.-]+)\\)")?>`))?.slice(1)
+    const strands = (html: string) => html.indexOf('data-strand=')
+    const usual = renderToStaticMarkup(<Capybara look={look} />)
+    expect(worn(usual, 'hat')).toEqual(['worn', '250', String(hatBase(look))])
+    expect(worn(usual, 'glasses')).toEqual(['worn', undefined, undefined])
+    expect(worn(usual, 'headband')).toEqual(['worn', undefined, undefined])
+    const band = usualSpot(look, 'headband')
+    const moved = renderToStaticMarkup(<Capybara look={{ ...look, placed: { hat: { x: 320, y: 180 }, glasses: { x: 262, y: 280 }, headband: { x: 236, y: band.y + 10 } } }} />)
+    expect(worn(moved, 'hat')).toEqual(['worn', '320', '180'])
+    expect(worn(moved, 'glasses')).toEqual(['worn', '12', '15'])
+    expect(worn(moved, 'headband')).toEqual(['worn', '-14', '10'])
+    expect(moved.indexOf('data-glasses=')).toBeLessThan(strands(moved))
+    const pushedUp = renderToStaticMarkup(<Capybara look={{ ...look, placed: { glasses: { x: 250, y: 170 } } }} />)
+    expect(worn(pushedUp, 'glasses')).toEqual(['worn', '0', '-95'])
+    expect(pushedUp.indexOf('data-glasses=')).toBeGreaterThan(strands(pushedUp))
+    const carried = renderToStaticMarkup(<Capybara look={look} lifted={{ item: 'glasses', x: 470, y: 60, away: true }} />)
+    expect(worn(carried, 'glasses')).toEqual(['worn lifted away', '220', '-205'])
+    expect(carried.indexOf('data-glasses=')).toBeGreaterThan(carried.indexOf('data-clip='))
+    expect(worn(renderToStaticMarkup(<Capybara look={look} lifted={{ item: 'hat', x: 300, y: 120, away: false }} />), 'hat')).toEqual(['worn lifted', '300', '120'])
   })
   it('renders persistent lather only on soaped locks, in the studio and in portraits', () => {
     const look = createLook('mochi')
@@ -269,42 +293,51 @@ describe('dress-up outfits', () => {
     expect(names.every(Boolean)).toBe(true)
     expect(new Set(names).size).toBe(OUTFITS.length)
   })
-  it('floats the halo just above the hair, or above the hat, without leaving the picture', () => {
-    const haloAt = (hat: Look['hat'], length: number) => {
-      const look = { ...createLook('cocoa'), headband: 'halo' as const, hat }
+  it('floats the halo just above the hair, or above the hat wherever it has been moved, without leaving the picture', () => {
+    const haloAt = (hat: Look['hat'], length: number, placed?: Look['placed']) => {
+      const look: Look = { ...createLook('cocoa'), headband: 'halo', hat, placed }
       look.hair = look.hair.map((strand) => ({ ...strand, length }))
-      return Number(renderToStaticMarkup(<Capybara look={look} />).match(/data-headband="halo"[^>]*><g transform="translate\(0 (-?[\d.]+)\)"/)?.[1])
+      const shift = renderToStaticMarkup(<Capybara look={look} />).match(/data-headband="halo" class="worn" pointer-events="none"(?: transform="translate\((-?[\d.]+) (-?[\d.]+)\)")?>/)
+      expect(shift).not.toBeNull()
+      return shift?.[1] ? [Number(shift[1]), Number(shift[2])] : [0, 0]
     }
-    expect(haloAt('none', MIN_LENGTH)).toBe(0)
-    expect(haloAt('none', 1)).toBeLessThan(haloAt('none', MIN_LENGTH))
-    expect(haloAt('party', MIN_LENGTH)).toBeLessThan(haloAt('tiara', MIN_LENGTH))
-    expect(haloAt('tiara', MIN_LENGTH)).toBeLessThan(haloAt('none', MIN_LENGTH))
-    expect(haloAt('chef', 1)).toBe(26 - 142)
+    expect(haloAt('none', MIN_LENGTH)).toEqual([0, 0])
+    expect(haloAt('none', 1)[1]).toBeLessThan(0)
+    expect(haloAt('party', MIN_LENGTH)[1]).toBeLessThan(haloAt('tiara', MIN_LENGTH)[1])
+    expect(haloAt('tiara', MIN_LENGTH)[1]).toBeLessThan(0)
+    expect(haloAt('chef', 1)).toEqual([0, 26 - 142])
+    expect(haloAt('tiara', MIN_LENGTH, { hat: { x: 300, y: 260 } })).toEqual([50, 260 - 52 - 22 - 142])
+    expect(haloAt('tiara', MIN_LENGTH, { hat: { x: 300, y: 260 }, headband: { x: 200, y: 100 } })).toEqual([-50, -42])
   })
 
-  it('lists every clip, hat, pair of glasses, headband and outfit by name with its own picture, marking only what is being worn', () => {
-    const look = { ...createLook('mochi'), outfit: 'wizard' as const, hat: 'party' as const, headband: 'bunny' as const }
+  it('lists every clip, hat, pair of glasses, headband, lash, makeup and outfit by name with its own picture, marking only what is being worn', () => {
+    const look = { ...createLook('mochi'), outfit: 'wizard' as const, hat: 'party' as const, headband: 'bunny' as const, lashes: 'curly' as const, lipstick: 'gloss' as const }
     const html = renderToStaticMarkup(<DressUpPanel look={look} name="Mochi" clip="daisy" onClip={() => {}} onWear={() => {}} dispatch={() => {}} />)
     const tiles = [...html.matchAll(/aria-pressed="(true|false)"[^>]*>[\s\S]*?<span class="tool-label">([^<]+)<\/span>/g)].map(([, pressed, label]) => [label, pressed === 'true'] as const)
-    const wearables = [...HATS, ...GLASSES, ...HEADBANDS].filter((item) => item !== 'none')
+    const wearables = [...HATS, ...GLASSES, ...HEADBANDS, ...LASHES, ...EYESHADOWS, ...BLUSHES, ...LIPSTICKS].filter((item) => item !== 'none')
     expect(tiles.map(([label]) => label)).toEqual([
       ...CLIP_KINDS.map((kind) => CLIP_LABELS[kind]),
       ...HATS.slice(1).map((hat) => HAT_LABELS[hat]), ...GLASSES.slice(1).map((glasses) => GLASSES_LABELS[glasses]), ...HEADBANDS.slice(1).map((headband) => HEADBAND_LABELS[headband]),
+      ...LASHES.slice(1).map((lashes) => LASH_LABELS[lashes]), ...EYESHADOWS.slice(1).map((shadow) => EYESHADOW_LABELS[shadow]),
+      ...BLUSHES.slice(1).map((blush) => BLUSH_LABELS[blush]), ...LIPSTICKS.slice(1).map((lipstick) => LIPSTICK_LABELS[lipstick]),
       ...OUTFITS.map((outfit) => OUTFIT_LABELS[outfit]),
     ])
     expect(new Set(tiles.map(([label]) => label)).size).toBe(CLIP_KINDS.length + wearables.length + OUTFITS.length)
-    expect(tiles.filter(([, worn]) => worn).map(([label]) => label)).toEqual(['Daisy', 'Party hat', 'Bunny ears', 'Wizard robe'])
+    expect(tiles.filter(([, worn]) => worn).map(([label]) => label)).toEqual(['Daisy', 'Party hat', 'Bunny ears', 'Curly lashes', 'Lip gloss', 'Wizard robe'])
+    expect(html).toContain('aria-label="Fake eyelashes"')
+    expect(html).toContain('>Makeup</h3>')
     const icons = [...CLIP_KINDS.map((kind) => renderToStaticMarkup(<WearableIcon slot="clip" item={kind} />)),
       ...HATS.slice(1).map((hat) => renderToStaticMarkup(<WearableIcon slot="hat" item={hat} />)),
       ...GLASSES.slice(1).map((glasses) => renderToStaticMarkup(<WearableIcon slot="glasses" item={glasses} />)),
-      ...HEADBANDS.slice(1).map((headband) => renderToStaticMarkup(<WearableIcon slot="headband" item={headband} />))]
+      ...HEADBANDS.slice(1).map((headband) => renderToStaticMarkup(<WearableIcon slot="headband" item={headband} />)),
+      ...(Object.keys(MAKEUP) as MakeupSlot[]).flatMap((slot) => MAKEUP[slot].slice(1).map((item) => renderToStaticMarkup(<MakeupIcon slot={slot} item={item} />)))]
     expect(new Set(icons).size).toBe(icons.length)
   })
   it('puts on whatever is tapped, takes off what is already worn, and adds a tapped clip on a free spot until there are too many', () => {
     const dispatch = vi.fn()
     const onClip = vi.fn()
     const onWear = vi.fn()
-    const look = { ...createLook('mochi'), hat: 'crown' as const }
+    const look = { ...createLook('mochi'), hat: 'crown' as const, blush: 'freckles' as const }
     const tiles = buttonsIn(DressUpPanel({ look, name: 'Mochi', clip: 'bow', onClip, onWear, dispatch }))
     tiles.forEach((tile) => tile.props.onClick())
     expect(onClip.mock.calls.map(([kind]) => kind)).toEqual([...CLIP_KINDS])
@@ -313,6 +346,10 @@ describe('dress-up outfits', () => {
       ...HATS.slice(1).map((item) => ({ type: 'wear', slot: 'hat', item: item === 'crown' ? 'none' : item })),
       ...GLASSES.slice(1).map((item) => ({ type: 'wear', slot: 'glasses', item })),
       ...HEADBANDS.slice(1).map((item) => ({ type: 'wear', slot: 'headband', item })),
+      ...LASHES.slice(1).map((item) => ({ type: 'wear', slot: 'lashes', item })),
+      ...EYESHADOWS.slice(1).map((item) => ({ type: 'wear', slot: 'eyeshadow', item })),
+      ...BLUSHES.slice(1).map((item) => ({ type: 'wear', slot: 'blush', item: item === 'freckles' ? 'none' : item })),
+      ...LIPSTICKS.slice(1).map((item) => ({ type: 'wear', slot: 'lipstick', item })),
       ...OUTFITS.map((outfit) => ({ type: 'outfit', outfit })),
     ])
     expect(onWear).toHaveBeenCalledTimes(dispatch.mock.calls.length)
@@ -322,6 +359,48 @@ describe('dress-up outfits', () => {
     expect(onClip).toHaveBeenLastCalledWith('daisy')
     expect(dispatch).not.toHaveBeenCalled()
     expect(renderToStaticMarkup(<DressUpPanel look={full} name="Mochi" clip="bow" onClip={onClip} onWear={onWear} dispatch={dispatch} />)).toContain('Mochi has 12 clips! Drag one off to make room.')
+  })
+})
+
+describe('makeup and lashes', () => {
+  it('paints every kind of lashes, eyeshadow, blush and lipstick differently, on every shape of eye and mouth', () => {
+    for (const lid of ['calm', 'wide', 'shut', 'happy'] as const) {
+      const lids = [lid, lid] as const
+      expect(new Set(LASHES.map((lashes) => renderToStaticMarkup(<LashArt lashes={lashes} lids={lids} />))).size).toBe(LASHES.length)
+      expect(new Set(EYESHADOWS.map((eyeshadow) => renderToStaticMarkup(<EyeshadowArt eyeshadow={eyeshadow} lids={lids} id="t" />))).size).toBe(EYESHADOWS.length)
+    }
+    for (const shape of ['smile', 'giggle', 'surprised', 'sneeze', 'poked'] as LipShape[]) {
+      expect(new Set(LIPSTICKS.map((lipstick) => renderToStaticMarkup(<LipstickArt lipstick={lipstick} shape={shape} />))).size).toBe(LIPSTICKS.length)
+    }
+    expect(new Set(BLUSHES.map((blush) => renderToStaticMarkup(<BlushArt blush={blush} id="t" />))).size).toBe(BLUSHES.length)
+  })
+  it('grows lashes up out of each eye, with the outermost one flicking toward the outer corner', () => {
+    const shapes: (readonly [Lid, Lid])[] = [['calm', 'calm'], ['wide', 'wide'], ['happy', 'happy'], ['shut', 'shut'], ['shut', 'wide'], ['wide', 'shut']]
+    for (const lids of shapes) {
+      const lashes = [...renderToStaticMarkup(<LashArt lashes="long" lids={lids} />).matchAll(/d="M([\d.]+) ([\d.]+)L([\d.]+) ([\d.]+)"/g)].map((match) => match.slice(1).map(Number))
+      expect(lashes).toHaveLength(6)
+      for (const [, y, , tipY] of lashes) expect(tipY, lids.join()).toBeLessThan(y)
+      expect(lashes[0][2], lids.join()).toBeLessThan(lashes[0][0])
+      expect(lashes[3][2], lids.join()).toBeGreaterThan(lashes[3][0])
+    }
+  })
+  it('wears its makeup in every mood, with the eyeshadow under the eyes and the lashes inside them so they blink along', () => {
+    const plain = createLook('cocoa')
+    const madeUp: Look = { ...plain, lashes: 'sparkle', eyeshadow: 'rainbow', blush: 'rosy', lipstick: 'glitter' }
+    for (const mood of ['calm', 'happy', 'giggle', 'squint', 'surprised', 'sneeze', 'poked-left'] as const) {
+      const html = renderToStaticMarkup(<Capybara look={madeUp} mood={mood} />)
+      const eyes = html.indexOf('<g class="eyes ')
+      expect(html.indexOf('data-eyeshadow="rainbow"'), mood).toBeGreaterThan(-1)
+      expect(html.indexOf('data-eyeshadow="rainbow"'), mood).toBeLessThan(eyes)
+      expect(html.indexOf('data-lashes="sparkle"'), mood).toBeGreaterThan(eyes)
+      expect(html.indexOf('data-lashes="sparkle"'), mood).toBeLessThan(html.indexOf('d="m189 247 12-2'))
+      expect(html, mood).toContain('data-blush="rosy"')
+      expect(html, mood).toContain('data-lipstick="glitter"')
+      const defined = [...html.matchAll(/ id="([^"]+)"/g)].map(([, id]) => id)
+      expect(new Set(defined).size).toBe(defined.length)
+      expect([...html.matchAll(/url\(#([^)]+)\)/g)].map(([, id]) => id).filter((id) => !defined.includes(id))).toEqual([])
+      expect(renderToStaticMarkup(<Capybara look={plain} mood={mood} />)).not.toMatch(/data-(lashes|eyeshadow|blush|lipstick)=/)
+    }
   })
 })
 

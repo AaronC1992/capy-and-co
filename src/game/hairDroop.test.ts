@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { strandPoints } from './hair'
+import { FLOOR_Y, strandPoints } from './hair'
 import type { Point } from './hair'
 import { droopChain, droopOffsets, soakedOffsets } from './hairDroop'
-import { HAIR_CENTER_X, HAIR_POINTS, HAIR_SHAPE_LENGTH } from './hairLayout'
+import { HAIR_CENTER_X, HAIR_POINTS, HAIR_SHAPE_LENGTH, MAX_LENGTH } from './hairLayout'
 import { headClearance } from './headShape'
 import { createLook, STRAND_COUNT } from './model'
 
@@ -70,6 +70,21 @@ describe('wet hair drooping', () => {
     const offsets = droopOffsets(droopChain(restOf(5)), lean)
     expect(offsets.slice(0, 24).every((value) => value === 0)).toBe(true)
     expect(Math.hypot(offsets[46], offsets[47])).toBeGreaterThan(20)
+  })
+  it('lays soaked floor-length hair along the floor instead of through it', () => {
+    for (const index of [0, 5, 11, 30, 62]) {
+      const rest = strandPoints({ ...look.hair[index], length: MAX_LENGTH }, index)
+      const wet = lift(rest, soakedOffsets(rest))
+      for (const point of wet) {
+        expect(point.y, `strand ${index}`).toBeLessThanOrEqual(FLOOR_Y + 1e-9)
+        expect(point.x, `strand ${index}`).toBeGreaterThanOrEqual(0)
+        expect(point.x, `strand ${index}`).toBeLessThanOrEqual(500)
+      }
+      expect(wet[HAIR_POINTS].y, `strand ${index}`).toBeGreaterThan(FLOOR_Y - 12)
+      // The hair bends where it meets the floor but none of it goes missing.
+      for (let step = 1; step <= HAIR_POINTS; step++) expect(segment(wet, step)).toBeLessThanOrEqual(segment(rest, step) + 1e-6)
+      expect(segment(wet, HAIR_POINTS)).toBeCloseTo(segment(rest, HAIR_POINTS), 6)
+    }
   })
   it('soaks a whole strand at once the same way as fully wet hair', () => {
     expect(soakedOffsets(restOf(7))).toEqual(droopOffsets(droopChain(restOf(7)), leaned(1)))

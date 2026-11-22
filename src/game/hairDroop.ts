@@ -1,3 +1,4 @@
+import { FLOOR_EDGES, floorUnder } from './hair'
 import type { Point } from './hair'
 import { HAIR_CENTER_X, HAIR_POINTS, HAIR_SHAPE_LENGTH } from './hairLayout'
 import { wrapAngle } from './hairWind'
@@ -31,6 +32,8 @@ export interface DroopChain {
   clearance: number[]
   // -1 or 1: the side of the head the root is on, and the way hair falls off the top.
   outward: number
+  // Where hair long enough to reach the floor lies.
+  floor: number
 }
 
 // `points` is the resting strand, root first.
@@ -41,6 +44,7 @@ export function droopChain(points: readonly Point[]): DroopChain {
     angles: [],
     clearance: points.map((point) => headClearance(point.x, point.y)),
     outward: points[0].x >= HAIR_CENTER_X ? 1 : -1,
+    floor: floorUnder(points[0].x),
   }
   for (let step = 1; step < points.length; step++) {
     const dx = points[step].x - points[step - 1].x
@@ -82,25 +86,43 @@ function clearOfHead(x: number, y: number, length: number, heading: number, outw
 }
 
 // Lets each segment of a strand fall toward straight down, root fixed and every segment keeping its length, so wet
-// hair hangs like hair instead of stretching. `lean` says how far each point has given way (0 = resting,
-// 1 = hanging). Returns the displacement of every point after the root.
+// hair hangs like hair instead of stretching. Hair long enough to reach the floor lies along it. `lean` says how far
+// each point has given way (0 = resting, 1 = hanging). Returns the displacement of every point after the root.
 export function droopOffsets(chain: DroopChain, lean: ArrayLike<number>): number[] {
   const offsets = new Array<number>(HAIR_SHAPE_LENGTH)
   let x = 0
   let y = 0
+  // The way hair lying on the floor runs: away from the middle, until it meets the edge and folds back.
+  let floorWay = chain.outward
   for (let step = 1; step <= HAIR_POINTS; step++) {
     const slot = step - 1
     const length = chain.lengths[slot]
+    const startX = chain.rest[step - 1].x + x
+    const startY = chain.rest[step - 1].y + y
     if (lean[slot] > 0 && length > 0) {
       const rest = chain.angles[slot]
       const bias = chain.outward * OUTWARD_BIAS
       let heading = rest + GIVE[step] * lean[slot] * (wrapAngle(DOWN - rest - bias) + bias)
-      const startX = chain.rest[step - 1].x + x
-      const startY = chain.rest[step - 1].y + y
       const need = Math.min(chain.clearance[step], CLEARANCE, headClearance(startX, startY) + CLIMB * length)
       heading = clearOfHead(startX, startY, length, heading, chain.outward, need)
       x += length * (Math.cos(heading) - Math.cos(rest))
       y += length * (Math.sin(heading) - Math.sin(rest))
+    }
+    const endY = chain.rest[step].y + y
+    if (endY > chain.floor) {
+      // The segment reaches the floor part way along, and the rest of it lies flat.
+      const endX = chain.rest[step].x + x
+      const share = endY > startY ? Math.max(0, Math.min(1, (chain.floor - startY) / (endY - startY))) : 0
+      let floorX = startX + (endX - startX) * share + floorWay * length * (1 - share)
+      if (floorX > FLOOR_EDGES[1]) {
+        floorX = 2 * FLOOR_EDGES[1] - floorX
+        floorWay = -1
+      } else if (floorX < FLOOR_EDGES[0]) {
+        floorX = 2 * FLOOR_EDGES[0] - floorX
+        floorWay = 1
+      }
+      x = floorX - chain.rest[step].x
+      y = chain.floor - chain.rest[step].y
     }
     offsets[slot * 2] = x
     offsets[slot * 2 + 1] = y

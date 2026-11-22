@@ -1,7 +1,7 @@
 import { memo, useId } from 'react'
 import type { Ref, SVGProps } from 'react'
 import { CHARACTERS } from '../game/model'
-import type { Look, Strand } from '../game/model'
+import type { Lashes, Lipstick, Look, Strand } from '../game/model'
 import { mixColor } from '../game/color'
 import { dyeStops } from '../game/dye'
 import type { DyeStop } from '../game/dye'
@@ -16,8 +16,10 @@ import { isReaction } from '../game/reactions'
 import type { Reaction } from '../game/reactions'
 import type { SprayJet } from '../game/hairSprayer'
 import { FaceWear, HairWear } from './Accessories'
-import type { LiftedClip } from './Accessories'
+import type { Lifted } from './Accessories'
 import { AirStream } from './AirStream'
+import { BlushArt, EyeshadowArt, LashArt, LipstickArt } from './Makeup'
+import type { Lid } from './Makeup'
 import { OutfitBack, OutfitFront, Paws } from './Outfit'
 import { SprayStream } from './SprayStream'
 
@@ -29,8 +31,8 @@ interface CapybaraProps extends SVGProps<SVGSVGElement> {
   hairOffsets?: HairOffsets
   airflow?: AirJet
   spray?: SprayJet
-  // A clip being dragged to a new spot.
-  liftedClip?: LiftedClip
+  // A clip, hat, pair of glasses or headband being dragged to a new spot.
+  lifted?: Lifted
   // Counts reactions, so poking the same spot again plays its reaction again.
   beat?: number
 }
@@ -154,12 +156,24 @@ function ScalpCap({ look, id }: { look: Look; id: string }) {
 
 const DROPS = [[128, 200, -40], [372, 194, 40], [106, 270, -70], [394, 264, 70], [92, 330, -100], [408, 324, 100]]
 
-function Eyes({ mood }: { mood: Mood }) {
+// The shape of each upper lid (left eye, right eye), which the lashes and eyeshadow follow.
+function lidsFor(mood: Mood): [Lid, Lid] {
+  if (mood === 'calm') return ['calm', 'calm']
+  if (mood === 'surprised') return ['wide', 'wide']
+  if (mood === 'poked-left') return ['shut', 'wide']
+  if (mood === 'poked-right') return ['wide', 'shut']
+  if (mood === 'squint' || mood === 'shake' || mood === 'sneeze') return ['shut', 'shut']
+  return ['happy', 'happy']
+}
+
+// Lashes are drawn inside each pair of eyes, so they blink along with them.
+function Eyes({ mood, lashes }: { mood: Mood; lashes: Lashes }) {
+  const lash = <LashArt lashes={lashes} lids={lidsFor(mood)} />
   if (mood === 'calm') return <g className="eyes eyes-open" stroke="#503e33" strokeWidth="5" strokeLinecap="round">
-    <ellipse cx="198" cy="265" rx="5" ry="7" fill="#503e33" /><ellipse cx="302" cy="265" rx="5" ry="7" fill="#503e33" /><path d="m200 262 .1-.1m100 .1 .1-.1" stroke="#fff5e4" strokeWidth="3" />
+    <ellipse cx="198" cy="265" rx="5" ry="7" fill="#503e33" /><ellipse cx="302" cy="265" rx="5" ry="7" fill="#503e33" /><path d="m200 262 .1-.1m100 .1 .1-.1" stroke="#fff5e4" strokeWidth="3" />{lash}
   </g>
   if (mood === 'surprised') return <g className="eyes eyes-wide" stroke="#503e33" strokeWidth="3" strokeLinecap="round">
-    <ellipse cx="198" cy="263" rx="7.5" ry="10" fill="#503e33" /><ellipse cx="302" cy="263" rx="7.5" ry="10" fill="#503e33" /><path d="m201 258 .1-.1m100 .1 .1-.1" stroke="#fff5e4" strokeWidth="4" />
+    <ellipse cx="198" cy="263" rx="7.5" ry="10" fill="#503e33" /><ellipse cx="302" cy="263" rx="7.5" ry="10" fill="#503e33" /><path d="m201 258 .1-.1m100 .1 .1-.1" stroke="#fff5e4" strokeWidth="4" />{lash}
   </g>
   if (mood === 'poked-left' || mood === 'poked-right') {
     // The poked eye shuts tight and the other one goes wide.
@@ -167,27 +181,33 @@ function Eyes({ mood }: { mood: Mood }) {
     const open = left ? 302 : 198
     return <g className="eyes eyes-poked" stroke="#503e33" strokeLinecap="round" strokeLinejoin="round">
       <path d={left ? 'M190 258l14 7-14 7' : 'M310 258l-14 7 14 7'} fill="none" strokeWidth="5" />
-      <ellipse cx={open} cy="263" rx="7.5" ry="10" fill="#503e33" strokeWidth="3" /><path d={`m${open + 3} 258 .1-.1`} stroke="#fff5e4" strokeWidth="4" />
+      <ellipse cx={open} cy="263" rx="7.5" ry="10" fill="#503e33" strokeWidth="3" /><path d={`m${open + 3} 258 .1-.1`} stroke="#fff5e4" strokeWidth="4" />{lash}
     </g>
   }
   if (mood === 'squint' || mood === 'shake' || mood === 'sneeze') return <g className="eyes eyes-squint" fill="none" stroke="#503e33" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M190 258l14 7-14 7M310 258l-14 7 14 7" />
+    <path d="M190 258l14 7-14 7M310 258l-14 7 14 7" />{lash}
   </g>
-  return <g className="eyes eyes-happy" fill="none" stroke="#503e33" strokeWidth="5" strokeLinecap="round"><path d="M188 268q10-10 20 0M292 268q10-10 20 0" /></g>
+  return <g className="eyes eyes-happy" fill="none" stroke="#503e33" strokeWidth="5" strokeLinecap="round"><path d="M188 268q10-10 20 0M292 268q10-10 20 0" />{lash}</g>
 }
 
-function Mouth({ mood }: { mood: Mood }) {
+function Mouth({ mood, lipstick }: { mood: Mood; lipstick: Lipstick }) {
   if (mood === 'giggle' || mood === 'boop' || mood === 'ticklish') return <g className="mouth-giggle" stroke="#805b45" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M250 307v9" fill="none" /><path d="M233 316q17 24 34 0Z" fill="#8a5242" />
+    <LipstickArt lipstick={lipstick} shape="giggle" /><path d="M250 307v9" fill="none" /><path d="M233 316q17 24 34 0Z" fill="#8a5242" />
   </g>
   if (mood === 'surprised') return <g className="mouth-surprised" stroke="#805b45" strokeLinecap="round">
-    <path d="M250 307v8" fill="none" strokeWidth="3.5" /><ellipse cx="250" cy="325" rx="6" ry="7.5" fill="#8a5242" strokeWidth="3" />
+    <LipstickArt lipstick={lipstick} shape="surprised" /><path d="M250 307v8" fill="none" strokeWidth="3.5" /><ellipse cx="250" cy="325" rx="6" ry="7.5" fill="#8a5242" strokeWidth="3" />
   </g>
   if (mood === 'sneeze') return <g className="mouth-sneeze" stroke="#805b45" strokeLinecap="round">
-    <path d="M250 307v5" fill="none" strokeWidth="3.5" /><ellipse cx="250" cy="324" rx="11" ry="10" fill="#8a5242" strokeWidth="3" />
+    <LipstickArt lipstick={lipstick} shape="sneeze" /><path d="M250 307v5" fill="none" strokeWidth="3.5" /><ellipse cx="250" cy="324" rx="11" ry="10" fill="#8a5242" strokeWidth="3" />
   </g>
-  if (mood === 'poked-left' || mood === 'poked-right') return <path className="mouth-poked" d="M250 307v9m-14 6q3.5-4 7 0t7 0 7 0 7 0" fill="none" stroke="#805b45" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" />
-  return <path d="M250 307v12m-17-2q17 17 34 0" fill="none" stroke="#805b45" strokeWidth="3.5" strokeLinecap="round" />
+  if (mood === 'poked-left' || mood === 'poked-right') return <>
+    <LipstickArt lipstick={lipstick} shape="poked" />
+    <path className="mouth-poked" d="M250 307v9m-14 6q3.5-4 7 0t7 0 7 0 7 0" fill="none" stroke="#805b45" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" />
+  </>
+  return <>
+    <LipstickArt lipstick={lipstick} shape="smile" />
+    <path d="M250 307v12m-17-2q17 17 34 0" fill="none" stroke="#805b45" strokeWidth="3.5" strokeLinecap="round" />
+  </>
 }
 
 const BUBBLE_WORDS: Record<Reaction, string> = { 'poked-left': 'Hey!', 'poked-right': 'Hey!', sneeze: 'Achoo!', boop: 'Boing!', ticklish: 'Hee hee!' }
@@ -218,9 +238,13 @@ function ReactionArt({ reaction }: { reaction: Reaction }) {
   </g>
 }
 
-export const Capybara = memo(function Capybara({ look, svgRef, mood = 'calm', portrait = false, hairOffsets, airflow, spray, liftedClip, beat = 0, className, ...props }: CapybaraProps) {
+export const Capybara = memo(function Capybara({ look, svgRef, mood = 'calm', portrait = false, hairOffsets, airflow, spray, lifted, beat = 0, className, ...props }: CapybaraProps) {
   const id = useId().replace(/:/g, '')
   const friend = CHARACTERS.find((c) => c.id === look.character)!
+  const ear = <>
+    <path d="M184 227c-45-49-55 25-21 32" fill={friend.fur} stroke="#89664e" strokeWidth="3.5" />
+    <path d="M170 239q-16-21-14 2" fill="none" stroke="#b47b69" strokeWidth="9" strokeLinecap="round" />
+  </>
   const glad = mood === 'happy' || mood === 'giggle' || mood === 'breeze' || mood === 'boop' || mood === 'ticklish'
   const reaction = isReaction(mood) ? mood : null
   // Body reactions take turns between two copies of their animation, so the same reaction can start over.
@@ -235,27 +259,29 @@ export const Capybara = memo(function Capybara({ look, svgRef, mood = 'calm', po
     <OutfitBack outfit={look.outfit} id={id} fur={friend.fur} light={friend.light} />
     <Paws fur={friend.fur} />
     <OutfitFront outfit={look.outfit} id={id} fur={friend.fur} light={friend.light} />
-    <g className="ear ear-left"><path d="M184 227c-45-49-55 25-21 32" fill={friend.fur} stroke="#89664e" strokeWidth="3.5" /><path d="M170 239q-16-21-14 2" fill="none" stroke="#b47b69" strokeWidth="9" strokeLinecap="round" /></g>
-    <g className="ear ear-right"><path d="M334 227c45-49 55 25 21 32" fill={friend.fur} stroke="#89664e" strokeWidth="3.5" /><path d="M341 239q16-21 14 2" fill="none" stroke="#b47b69" strokeWidth="9" strokeLinecap="round" /></g>
+    <g className="ear ear-left">{ear}</g>
+    <g className="ear ear-right"><g transform="translate(500 0) scale(-1 1)">{ear}</g></g>
     <path d={HEAD_PATH} fill={`url(#${id}-fur)`} stroke="#89664e" strokeWidth="3.5" />
     <path d="M181 233c-4-23 9-40 27-47" fill="none" stroke="#f6d5a6" strokeWidth="5" strokeLinecap="round" opacity=".5" />
     <ellipse cx="183" cy="293" rx="24" ry="18" fill={`url(#${id}-cheek)`} />
     <ellipse cx="317" cy="293" rx="24" ry="18" fill={`url(#${id}-cheek)`} />
-    <Eyes mood={mood} />
+    <BlushArt blush={look.blush} id={id} />
+    <EyeshadowArt eyeshadow={look.eyeshadow} lids={lidsFor(mood)} id={id} />
+    <Eyes mood={mood} lashes={look.lashes} />
     <path d="m189 247 12-2m99 0 12 2" stroke="#89664e" strokeWidth="3" strokeLinecap="round" />
     <path d="M213 280c-38 0-48 18-36 43 15 29 127 29 143 0 12-25 2-43-35-43Z" fill={friend.light} stroke="#a17b58" strokeWidth="2.5" />
     <ellipse cx="234" cy="293" rx="7" ry="5" fill="#75513e" transform="rotate(-12 234 293)" />
     <ellipse cx="266" cy="293" rx="7" ry="5" fill="#75513e" transform="rotate(12 266 293)" />
-    <Mouth mood={mood} />
+    <Mouth mood={mood} lipstick={look.lipstick} />
     <g fill="#ac805e" opacity=".7"><circle cx="191" cy="305" r="2" /><circle cx="199" cy="316" r="2" /><circle cx="309" cy="305" r="2" /><circle cx="301" cy="316" r="2" /></g>
-    <FaceWear look={look} />
+    <FaceWear look={look} lifted={lifted} />
     <ScalpCap look={look} id={id} />
     {/* Mitred joins paint far faster than round ones and look the same on hair this smooth. */}
     <g className="hair" fill="none" strokeLinecap="round" strokeLinejoin="miter">
       {look.hair.map((strand, index) => isBald(strand.length) ? null : <HairStrand key={index} strand={strand} index={index} offsets={hairOffsets?.[index]} paintId={`${id}-dye-${index}`} />)}
     </g>
     <SoapFoam look={look} offsets={hairOffsets} />
-    <HairWear look={look} offsets={hairOffsets} lifted={liftedClip} />
+    <HairWear look={look} offsets={hairOffsets} lifted={lifted} />
     {airflow && <AirStream jet={airflow} id={id} />}
     {spray && <SprayStream jet={spray} id={id} />}
     {mood === 'shake' && <g className="shake-drops" fill="#cdeef8" stroke="#5f9fbd" strokeWidth="2">

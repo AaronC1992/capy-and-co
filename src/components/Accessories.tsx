@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import type { Clip, ClipKind, Glasses, Hat, Headband, Look, WearSlot } from '../game/model'
-import { clipPosition, clipTilt, hatBase } from '../game/accessories'
-import type { HairOffsets } from '../game/hair'
+import { clipPosition, clipTilt, HALO_SPOT, usualSpot, wornSpot } from '../game/accessories'
+import type { HairOffsets, Point } from '../game/hair'
 import { HEADBAND_PATH, headbandY } from '../game/hairline'
 
 export const HAT_LABELS: Record<Hat, string> = {
@@ -195,26 +195,15 @@ function OnBand({ x, tilt = 0, lift = 2, children }: { x: number; tilt?: number;
 
 const ANTLER = 'M0 0C-2-18-8-32-20-46M-5-20C-16-22-26-28-30-38M-12-36C-12-44-8-50-2-54'
 
-// How far each hat reaches up from its brim, so a halo can float just above it.
-const HAT_TOPS: Record<Hat, number> = {
-  none: 0, crown: 62, party: 104, beanie: 91, sunhat: 60, tophat: 94, cowboy: 74,
-  chef: 106, witch: 104, pirate: 72, cap: 66, tiara: 52, strawberry: 86,
-}
-
-// The halo floats above the hair, or above the hat, without leaving the picture.
-function haloY(look: Look): number {
-  return Math.max(26, hatBase(look) - (look.hat === 'none' ? 38 : HAT_TOPS[look.hat] + 22))
-}
-
 // Headbands go across the top of the head, over the roots of the hair. The halo floats above it instead.
-function HeadbandArt({ headband, halo = 142 }: { headband: Headband; halo?: number }) {
+function HeadbandArt({ headband }: { headband: Headband }) {
   if (headband === 'none') return null
-  if (headband === 'halo') return <g transform={`translate(0 ${halo - 142})`}><g className="halo">
+  if (headband === 'halo') return <g className="halo">
     <ellipse cx="250" cy="142" rx="58" ry="14" fill="none" stroke="#c9a23f" strokeWidth="11" />
     <ellipse cx="250" cy="142" rx="58" ry="14" fill="none" stroke="#f3d36b" strokeWidth="7" />
     <path d="M214 134q18-6 36-6" fill="none" stroke="#fff6c9" strokeWidth="3" strokeLinecap="round" />
     <path d="M318 118l2 5 5 2-5 2-2 5-2-5-5-2 5-2ZM180 126l1.5 4 4 1.5-4 1.5-1.5 4-1.5-4-4-1.5 4-1.5Z" fill="#fff6c9" stroke="#d6b45a" strokeWidth="1.2" />
-  </g></g>
+  </g>
   const colors = BAND_COLORS[headband]
   return <g>
     {headband === 'bunny' && [218, 282].map((x, side) => <Ear key={x} x={x} tilt={side ? 10 : -10} outer="#f8f4ee" inner="#f2c3cd" line="#a99c8c" />)}
@@ -292,11 +281,13 @@ function ClipArt({ kind }: { kind: ClipKind }) {
   }
 }
 
-export interface LiftedClip { index: number; x: number; y: number; away: boolean }
+// Something being carried by a finger: a clip (by its number) or the hat, glasses or headband, and whether letting go
+// there would take it off.
+export interface Lifted { item: number | WearSlot; x: number; y: number; away: boolean }
 
-function Clips({ look, offsets, lifted }: { look: Look; offsets?: HairOffsets; lifted?: LiftedClip }) {
+function Clips({ look, offsets, lifted }: { look: Look; offsets?: HairOffsets; lifted?: Lifted }) {
   return <g className="clips">{look.clips.map((clip: Clip, index) => {
-    const held = lifted?.index === index ? lifted : null
+    const held = lifted?.item === index ? lifted : null
     const spot = held ?? clipPosition(look, clip, offsets)
     return <g key={index} data-clip={clip.kind} className={held ? `clip lifted${held.away ? ' away' : ''}` : 'clip'} transform={`translate(${Math.round(spot.x * 10) / 10} ${Math.round(spot.y * 10) / 10}) rotate(${clipTilt(spot)})`}>
       <ClipArt kind={clip.kind} />
@@ -304,17 +295,48 @@ function Clips({ look, offsets, lifted }: { look: Look; offsets?: HairOffsets; l
   })}</g>
 }
 
-// Glasses sit on the face, under any hair that falls over it.
-export function FaceWear({ look }: { look: Look }) {
-  return look.glasses === 'none' ? null : <g data-glasses={look.glasses} pointerEvents="none"><GlassesArt glasses={look.glasses} /></g>
+const round1 = (value: number) => Math.round(value * 10) / 10
+// Glasses pushed this far up from the eyes sit on the hair instead of under it.
+const PUSHED_UP = 24
+
+// Where each piece of art is drawn around: the hat around its brim at 0,0, the glasses on the eyes, the halo at
+// HALO_SPOT, and the other headbands across the top of the head.
+function artSpot(look: Look, slot: WearSlot): Point {
+  if (slot === 'hat') return { x: 0, y: 0 }
+  if (slot === 'headband' && look.headband === 'halo') return HALO_SPOT
+  return usualSpot(look, slot)
 }
 
-// The headband, the hat and the clips go on over the hair.
-export function HairWear({ look, offsets, lifted }: { look: Look; offsets?: HairOffsets; lifted?: LiftedClip }) {
+// Something worn, moved to wherever it has been put or is being carried.
+function Worn({ look, slot, lifted, children }: { look: Look; slot: WearSlot; lifted?: Lifted; children: ReactNode }) {
+  const held = lifted?.item === slot ? lifted : null
+  const spot = held ?? wornSpot(look, slot)
+  const art = artSpot(look, slot)
+  const x = round1(spot.x - art.x)
+  const y = round1(spot.y - art.y)
+  return <g {...{ [`data-${slot}`]: look[slot] }} className={held ? `worn lifted${held.away ? ' away' : ''}` : 'worn'} pointerEvents="none"
+    transform={x || y ? `translate(${x} ${y})` : undefined}>{children}</g>
+}
+
+function onHair(look: Look, lifted?: Lifted): boolean {
+  return lifted?.item === 'glasses' || wornSpot(look, 'glasses').y < usualSpot(look, 'glasses').y - PUSHED_UP
+}
+
+// Glasses sit on the face, under any hair that falls over it.
+export function FaceWear({ look, lifted }: { look: Look; lifted?: Lifted }) {
+  if (look.glasses === 'none' || onHair(look, lifted)) return null
+  return <Worn look={look} slot="glasses"><GlassesArt glasses={look.glasses} /></Worn>
+}
+
+// The headband, the hat and the clips go on over the hair, and so do glasses pushed up onto it or being carried.
+export function HairWear({ look, offsets, lifted }: { look: Look; offsets?: HairOffsets; lifted?: Lifted }) {
   return <>
-    {look.headband !== 'none' && <g data-headband={look.headband} pointerEvents="none"><HeadbandArt headband={look.headband} halo={haloY(look)} /></g>}
-    {look.hat !== 'none' && <g data-hat={look.hat} pointerEvents="none" transform={`translate(250 ${hatBase(look)})`}><HatArt hat={look.hat} /></g>}
+    {look.headband !== 'none' && <Worn look={look} slot="headband" lifted={lifted}><HeadbandArt headband={look.headband} /></Worn>}
+    {look.glasses !== 'none' && onHair(look, lifted) && lifted?.item !== 'glasses'
+      && <Worn look={look} slot="glasses"><GlassesArt glasses={look.glasses} /></Worn>}
+    {look.hat !== 'none' && <Worn look={look} slot="hat" lifted={lifted}><HatArt hat={look.hat} /></Worn>}
     {look.clips.length > 0 && <Clips look={look} offsets={offsets} lifted={lifted} />}
+    {look.glasses !== 'none' && lifted?.item === 'glasses' && <Worn look={look} slot="glasses" lifted={lifted}><GlassesArt glasses={look.glasses} /></Worn>}
   </>
 }
 
