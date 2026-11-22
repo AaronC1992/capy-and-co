@@ -1,8 +1,9 @@
 import { useRef, useState } from 'react'
 import { CHARACTERS } from '../game/model'
 import type { Photo } from '../game/storage'
+import { PLAIN_SCENE } from '../game/photoBooth'
 import { downloadPortrait } from '../game/exportPhoto'
-import { Capybara } from './Capybara'
+import { PhotoScene } from './PhotoScene'
 import { Icon } from './Icon'
 
 function PhotoCard({ photo, onRemove }: { photo: Photo; onRemove: (id: string) => void }) {
@@ -25,7 +26,7 @@ function PhotoCard({ photo, onRemove }: { photo: Photo; onRemove: (id: string) =
     }
   }
   return <article className="photo-card">
-    <div className="photo-art" style={{ background: friend.backdrop }}><Capybara look={photo.look} svgRef={svgRef} portrait role="img" aria-label={`Saved hairstyle for ${friend.name}`} /></div>
+    <div className="photo-art"><PhotoScene look={photo.look} scene={photo.scene ?? PLAIN_SCENE} svgRef={svgRef} role="img" aria-label={`Saved picture of ${friend.name}`} /></div>
     <div className="photo-info"><h3>{friend.name}'s good hair day</h3><span>{new Date(photo.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span></div>
     <div className="photo-actions">
       <button className="text-button" disabled={busy} onClick={() => void download()}><Icon name="download" size={18} /> {busy ? 'Making picture…' : 'Download'}</button>
@@ -39,7 +40,7 @@ function PhotoCard({ photo, onRemove }: { photo: Photo; onRemove: (id: string) =
 export function Gallery({ photos, onRemove, onClose }: { photos: Photo[]; onRemove: (id: string) => void; onClose: () => void }) {
   return <>
     <p className="gallery-note">Your 12 most recent looks, kept in this browser. Download favorites to keep them forever.</p>
-    {photos.length === 0 ? <div className="empty-gallery"><Icon name="camera" size={56} /><h3>Your little wall of fame.</h3><p>Create a look, then tap “Picture perfect!” to save it here.</p><button className="primary-button" onClick={onClose}>Let's make a masterpiece <Icon name="arrow" size={18} /></button></div>
+    {photos.length === 0 ? <div className="empty-gallery"><Icon name="camera" size={56} /><h3>Your little wall of fame.</h3><p>Create a look, then tap “Picture perfect!” to pose for a picture.</p><button className="primary-button" onClick={onClose}>Let's make a masterpiece <Icon name="arrow" size={18} /></button></div>
       : <div className="gallery-grid">{photos.map((photo) => <PhotoCard key={photo.id} photo={photo} onRemove={onRemove} />)}</div>}
   </>
 }

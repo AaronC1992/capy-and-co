@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react'
 
-export type IconName = 'sparkles' | 'heart' | 'camera' | 'gallery' | 'undo' | 'reset' | 'sound' | 'muted' | 'close' | 'download' | 'trash' | 'arrow' | 'check' | 'brush' | 'comb' | 'snip' | 'grow' | 'curl' | 'soap' | 'wash' | 'blower' | 'color' | 'bow' | 'flower' | 'crown' | 'cherries' | 'star' | 'none' | 'help'
+export type IconName = 'sparkles' | 'heart' | 'camera' | 'gallery' | 'undo' | 'reset' | 'sound' | 'muted' | 'close' | 'download' | 'trash' | 'arrow' | 'check' | 'brush' | 'comb' | 'snip' | 'grow' | 'curl' | 'soap' | 'wash' | 'blower' | 'color' | 'help'
 
 const paths: Record<IconName, React.ReactNode> = {
   sparkles: <><path d="m12 3 2.4 6.6L21 12l-6.6 2.4L12 21l-2.4-6.6L3 12l6.6-2.4Z" /><path d="m20 2 .7 2.3L23 5l-2.3.7L20 8l-.7-2.3L17 5l2.3-.7Z" /></>,
@@ -25,12 +25,6 @@ const paths: Record<IconName, React.ReactNode> = {
   blower: <><path d="m8 12 1 9h5l-2-10" fill="#b5a0d8" /><path d="M14 5 21 3v11l-7-2" fill="#bad9de" /><rect x="2" y="3" width="14" height="11" rx="5" fill="#9ccbd2" /><circle cx="7" cy="8.5" r="2" fill="#effcfc" /><path d="M11 21v2m12-17h1m-1 5h1" /></>,
   wash: <><rect fill="#b2d3df" x="4" y="11" width="10" height="11" rx="3" /><path fill="#9ccbd2" d="M5 6.5h9.5L19 8.3v3.2H5Z" /><path d="M19 9.5h2M15 11.5l1 4.5h-2.2M22.7 7.2h.01M23 9.7h.01M22.7 12.2h.01" /><path fill="#effcfc" stroke="none" d="M9 15.2c-1.6 1.9-1.8 3.4 0 4.1 1.8-.7 1.6-2.2 0-4.1Z" /></>,
   color: <><path fill="#b9a4d4" d="m15 2 7 7-10 10-7-7Z" /><path d="m5 12-3 3v7h7l3-3M13 4l7 7M3 18l3 3" /></>,
-  bow: <><path fill="#e6a1af" d="M10 10C-2-2 0 26 10 14m4-4c12-12 10 16 0 4" /><rect fill="#f3bbc3" x="9" y="9" width="6" height="7" rx="2" /></>,
-  flower: <><path fill="#f1c5ad" d="M12 9C2-5-5 12 9 12-5 22 12 29 12 15c10 14 17-3 3-3C29 2 12-5 12 9Z" /><circle fill="#e6ba60" cx="12" cy="12" r="3" /></>,
-  crown: <><path fill="#eccd79" d="m3 7 5 4 4-8 4 8 5-4-2 13H5Z" /><path d="M5 16h14" /></>,
-  cherries: <><circle fill="#d87c80" cx="6" cy="17" r="4" /><circle fill="#d87c80" cx="18" cy="17" r="4" /><path d="M6 13 12 3l6 10M12 3c9-4 9 6 0 0Z" /></>,
-  star: <path fill="#ebca7b" d="m12 2 3 6 7 1-5 5 1 8-6-4-6 4 1-8-5-5 7-1Z" />,
-  none: <><circle cx="12" cy="12" r="9" /><path d="m6 6 12 12" /></>,
   help: <><circle cx="12" cy="12" r="9" /><path d="M9 8a3 3 0 1 1 5 2c-2 1-2 2-2 3m0 4h.01" /></>,
 }
 

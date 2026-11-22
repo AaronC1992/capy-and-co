@@ -1,8 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { addPhoto, freshSave, isLook, loadGame, MAX_PHOTOS, saveGame, STORAGE_KEY } from './storage'
 import type { StoragePort } from './storage'
-import { createLook, HAIR_GROUP_COUNT, STRAND_COUNT } from './model'
+import { createLook, HAIR_GROUP_COUNT, MAX_CLIPS, STRAND_COUNT } from './model'
 import { MIN_LENGTH } from './hairLayout'
+import type { Scene } from './photoBooth'
 
 function memoryStorage(): StoragePort {
   const entries = new Map<string, string>()
@@ -19,7 +20,7 @@ describe('local persistence', () => {
     const data = freshSave()
     data.active = 'cocoa'
     data.sound = true
-    data.looks.cocoa.accessory = 'crown'
+    Object.assign(data.looks.cocoa, { hat: 'crown', glasses: 'stars', headband: 'kitty', clips: [{ kind: 'heart', x: 290, y: 150, strand: 4, step: 10 }, { kind: 'butterfly', x: 250, y: 400 }] })
     data.looks.cocoa.hair[5] = { ...data.looks.cocoa.hair[5], bendX: 70, bendY: -45, soapy: true, wetness: 0.4, curl: 0.65, shape: Array.from({ length: 48 }, (_, slot) => slot / 3 - 5) }
     data.photos = addPhoto([], data.looks.cocoa, 'photo-1', '2026-01-01T12:00:00Z')
     expect(saveGame(storage, data)).toBeNull()
@@ -30,15 +31,25 @@ describe('local persistence', () => {
     const legacy = { ...freshSave(), version }
     for (const look of Object.values(legacy.looks)) look.hair = look.hair.slice(0, HAIR_GROUP_COUNT)
     legacy.looks.mochi.hair[3].flow = -0.75
-    legacy.looks.mochi.accessory = 'flower'
     if (soap) legacy.looks.mochi.hair[3] = { ...legacy.looks.mochi.hair[3], soapy: true, bendX: 50, bendY: -30 }
     legacy.photos = addPhoto([], legacy.looks.mochi, 'legacy', '2026-01-01T12:00:00Z')
-    storage.setItem(STORAGE_KEY, JSON.stringify(legacy))
+    // Back then each friend wore one accessory, with no hats, glasses or clips.
+    const stored = JSON.parse(JSON.stringify(legacy))
+    const worn: Record<string, string> = { mochi: 'flower', biscuit: 'crown', cocoa: 'none' }
+    for (const look of [...Object.values<Record<string, unknown>>(stored.looks), stored.photos[0].look]) {
+      for (const key of ['hat', 'glasses', 'headband', 'clips']) delete look[key]
+      look.accessory = worn[look.character as string]
+    }
+    storage.setItem(STORAGE_KEY, JSON.stringify(stored))
     const { data, error } = loadGame(storage)
     expect(error).toBeNull()
-    expect(data.version).toBe(2)
+    expect(data.version).toBe(3)
     expect(data.looks.mochi.hair).toHaveLength(65)
-    expect(data.looks.mochi.accessory).toBe('flower')
+    expect(data.looks.mochi).toMatchObject({ hat: 'none', glasses: 'none', headband: 'none', clips: [{ kind: 'daisy', x: 312, y: 186 }] })
+    expect(data.photos[0].look.clips).toEqual(data.looks.mochi.clips)
+    expect(data.looks.biscuit).toMatchObject({ hat: 'crown', clips: [] })
+    expect(data.looks.cocoa).toMatchObject({ hat: 'none', clips: [] })
+    expect(data.looks.mochi).not.toHaveProperty('accessory')
     for (let index = 3; index < STRAND_COUNT; index += HAIR_GROUP_COUNT) {
       expect(data.looks.mochi.hair[index]).toEqual(legacy.looks.mochi.hair[3])
       expect(data.photos[0].look.hair[index]).toEqual(legacy.looks.mochi.hair[3])
@@ -138,6 +149,35 @@ describe('local persistence', () => {
     storage.setItem(STORAGE_KEY, text)
     expect(loadGame(storage).error).toMatch(/could not be opened/)
   })
+  it('keeps dipped tips, fades, rainbow and glitter through a reload, and rejects broken ones', () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const storage = memoryStorage()
+    const data = freshSave()
+    const hair = data.looks.biscuit.hair
+    hair[2] = { ...hair[2], color: '#abcdef', tip: '#f0d878' }
+    hair[3] = { ...hair[3], tip: '#9fcb8b', fade: true, glitter: true }
+    hair[4] = { ...hair[4], rainbow: true }
+    data.photos = addPhoto([], data.looks.biscuit, 'fancy', '2026-01-01T12:00:00Z')
+    expect(saveGame(storage, data)).toBeNull()
+    expect(loadGame(storage)).toEqual({ data, error: null })
+    for (const invalid of [{ tip: 'gold' }, { tip: 7 }, { tip: null }, { fade: 'yes' }, { rainbow: 1 }, { glitter: 'on' }]) {
+      const look = createLook('mochi')
+      expect(isLook({ ...look, hair: look.hair.map((strand, i) => i === 5 ? { ...strand, ...invalid } : strand) })).toBe(false)
+    }
+  })
+  it('rejects hats, glasses, headbands and clips that do not exist, too many clips, and half-migrated looks', () => {
+    const look = createLook('mochi')
+    expect(isLook(look)).toBe(true)
+    const clip = { kind: 'bow', x: 300, y: 170 }
+    for (const invalid of [{ hat: 'sombrero' }, { glasses: 'telescope' }, { headband: 7 }, { hat: undefined }, { clips: undefined }, { clips: {} },
+      { clips: Array.from({ length: MAX_CLIPS + 1 }, () => clip) }, { clips: [{ ...clip, kind: 'sticker' }] }, { clips: [{ ...clip, y: 9999 }] },
+      { clips: [{ ...clip, strand: 2 }] }, { clips: [{ ...clip, strand: 2, step: 99 }] }, { accessory: 'crown' }]) {
+      expect(isLook({ ...look, ...invalid })).toBe(false)
+    }
+    const { hat: _hat, glasses: _glasses, headband: _headband, clips: _clips, ...old } = look
+    expect(isLook({ ...old, accessory: 'cherries' })).toBe(true)
+    expect(isLook({ ...old, accessory: 'monocle' })).toBe(false)
+  })
   it('rejects invalid hair lengths, colors and mismatched characters', () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {})
     const look = createLook('mochi')
@@ -167,9 +207,11 @@ describe('local persistence', () => {
     look.hair[0].color = '#000000'
     look.hair[0].bendX = 0
     look.hair[0].soapy = false
-    look.accessory = 'star'
+    look.hat = 'tophat'
+    look.clips.push({ kind: 'star', x: 100, y: 100 })
     expect(photos[0].look.hair[0].color).not.toBe('#000000')
-    expect(photos[0].look.accessory).toBe('none')
+    expect(photos[0].look.hat).toBe('none')
+    expect(photos[0].look.clips).toEqual([])
     expect(photos[0].look.hair[0]).toMatchObject({ bendX: 45, bendY: 30, soapy: true })
   })
   it('keeps only the 12 most recent pictures in newest-first order', () => {
@@ -178,5 +220,23 @@ describe('local persistence', () => {
     expect(photos).toHaveLength(MAX_PHOTOS)
     expect(photos[0].id).toBe('19')
     expect(photos.at(-1)?.id).toBe('8')
+  })
+  it('keeps the photo booth scene with its picture, unchanged by later booth play, and rejects broken scenes', () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const storage = memoryStorage()
+    const data = freshSave()
+    const booth: Scene = { background: 'beach', frame: 'polaroid', face: 'giggle', stickers: [{ kind: 'star', x: 62, y: 62 }] }
+    data.photos = addPhoto(addPhoto([], data.looks.mochi, 'plain', '2026-01-01T12:00:00Z'), data.looks.mochi, 'booth', '2026-01-02T12:00:00Z', booth)
+    booth.stickers.push({ kind: 'paw', x: 10, y: 10 })
+    booth.background = 'stars'
+    const scene = { background: 'beach', frame: 'polaroid', face: 'giggle', stickers: [{ kind: 'star', x: 62, y: 62 }] }
+    expect(data.photos[0].scene).toEqual(scene)
+    expect('scene' in data.photos[1]).toBe(false)
+    expect(saveGame(storage, data)).toBeNull()
+    expect(loadGame(storage)).toEqual({ data, error: null })
+    for (const invalid of [{ background: 'moon' }, { stickers: [{ kind: 'star', x: 9999, y: 0 }] }, { stickers: null }]) {
+      storage.setItem(STORAGE_KEY, JSON.stringify({ ...data, photos: [{ ...data.photos[0], scene: { ...scene, ...invalid } }] }))
+      expect(loadGame(storage).error).not.toBeNull()
+    }
   })
 })

@@ -1,15 +1,21 @@
 import { useEffect, useReducer, useRef, useState } from 'react'
 import { CHARACTERS, salonReducer } from './game/model'
-import type { Tool } from './game/model'
+import type { ClipKind, DyeMode, Tool } from './game/model'
 import { addPhoto, loadGame, saveGame } from './game/storage'
 import type { StoragePort } from './game/storage'
 import { SalonAudio } from './game/audio'
+import type { Sound } from './game/audio'
+import { freshScene } from './game/photoBooth'
 import { Capybara } from './components/Capybara'
 import { Icon } from './components/Icon'
 import { Studio } from './components/Studio'
 import { Toolbox } from './components/Toolbox'
+import type { Tab } from './components/Toolbox'
 import { Modal } from './components/Modal'
 import { Gallery } from './components/Gallery'
+import { PhotoBooth } from './components/PhotoBooth'
+
+const MODAL_TITLES = { gallery: 'A gallery of good hair days.', help: 'Small paws. Endless possibilities.', booth: 'Say capy!' }
 
 const browserStorage: StoragePort = {
   getItem: (key) => localStorage.getItem(key),
@@ -23,17 +29,23 @@ export default function App() {
   const [sound, setSound] = useState(initial.data.sound)
   const [tool, setTool] = useState<Tool>('brush')
   const [color, setColor] = useState<string>('#b5a0d8')
-  const [modal, setModal] = useState<'gallery' | 'help' | null>(null)
+  const [dye, setDye] = useState<DyeMode>('whole')
+  const [tab, setTab] = useState<Tab>('Style')
+  const [clip, setClip] = useState<ClipKind>('bow')
+  const [modal, setModal] = useState<keyof typeof MODAL_TITLES | null>(null)
+  // The booth remembers its background, frame and stickers for the next picture.
+  const [scene, setScene] = useState(freshScene)
   const [storageError, setStorageError] = useState(initial.error)
   const [audioError, setAudioError] = useState<string | null>(null)
   const [notice, setNotice] = useState('')
   const [audio] = useState(() => new SalonAudio())
   const look = state.looks[state.active]
+  const friend = CHARACTERS.find((item) => item.id === state.active)!
   const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const save = useRef({ version: 2 as const, active: state.active, looks: state.looks, photos, sound })
+  const save = useRef({ version: 3 as const, active: state.active, looks: state.looks, photos, sound })
 
   useEffect(() => {
-    save.current = { version: 2, active: state.active, looks: state.looks, photos, sound }
+    save.current = { version: 3, active: state.active, looks: state.looks, photos, sound }
     const timer = setTimeout(() => {
       const error = saveGame(browserStorage, save.current)
       if (error) setStorageError(error)
@@ -63,8 +75,8 @@ export default function App() {
     setAudioError('Sound could not start in this browser. The salon still works without it.')
   }
 
-  function playSound() {
-    if (sound) void audio.play().catch(soundFailure)
+  function playSound(effect: Sound = 'chime') {
+    if (sound) void audio.play(effect).catch(soundFailure)
   }
 
   function toggleSound() {
@@ -80,8 +92,7 @@ export default function App() {
   }
 
   function takePhoto() {
-    setPhotos((previous) => addPhoto(previous, look, `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`, new Date().toISOString()))
-    playSound()
+    setPhotos((previous) => addPhoto(previous, look, `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`, new Date().toISOString(), scene))
     setModal('gallery')
     notify('Picture added to your gallery!')
   }
@@ -97,10 +108,6 @@ export default function App() {
       </nav>
     </header>
     <main className="main-shell">
-      <section className="welcome">
-        <div><div className="welcome-kicker"><span className="tiny-flower">✳</span> A COZY CHAIR. A LITTLE CREATIVITY.</div><h1>Good hair. <span>Happy capy.</span><svg viewBox="0 0 36 43" aria-hidden="true"><path d="m9 2-1 13M29 12l-12 7m10 17-13-8" stroke="currentColor" strokeWidth="3" strokeLinecap="round" /></svg></h1><p>Snip, style & let your imagination run a little wild.</p></div>
-        <div className="free-play-note"><Icon name="heart" size={19} /><span>Just play.<br /><strong>There’s no wrong way.</strong></span></div>
-      </section>
       {(storageError || audioError) && <div className="error-banner" role="alert"><span>{storageError || audioError}</span><button className="round-button" aria-label="Dismiss message" onClick={() => { setStorageError(null); setAudioError(null) }}><Icon name="close" size={18} /></button></div>}
       <div className="salon-layout">
         <div className="play-column">
@@ -111,21 +118,20 @@ export default function App() {
               <span className="friend-check">{state.active === friend.id && <Icon name="check" size={12} />}</span>
             </button>)}
           </div>
-          <Studio look={look} tool={tool} color={color} dispatch={dispatch} onStyle={playSound} canUndo={state.history.length > 0} />
-          <div className="studio-caption"><span><span className="small-dot" /> Your very own little salon</span><span>Big ideas welcome. Perfect hair optional.</span></div>
+          <Studio look={look} tool={tool} color={color} dye={dye} decorating={tab === 'Dress up'} clip={clip} dispatch={dispatch} onStyle={playSound} canUndo={state.history.length > 0} />
         </div>
-        <Toolbox tool={tool} onTool={setTool} color={color} onColor={setColor} outfit={look.outfit} accessory={look.accessory} dispatch={dispatch} onPhoto={takePhoto} />
+        <Toolbox tab={tab} onTab={setTab} tool={tool} onTool={setTool} color={color} onColor={setColor} dye={dye} onDye={setDye} look={look} name={friend.name} clip={clip} onClip={setClip} onWear={() => playSound('pop')} dispatch={dispatch} onPhoto={() => setModal('booth')} />
       </div>
-      <footer className="site-footer"><span>Made for little hands & big imaginations <Icon name="heart" size={13} /></span><button className="mobile-help" onClick={() => setModal('help')}>How to play <Icon name="help" size={15} /></button><span>No scores. No rush. Just happy capys.</span></footer>
     </main>
     {notice && <div className="toast" role="status"><Icon name="check" size={18} />{notice}</div>}
-    {modal && <Modal title={modal === 'gallery' ? 'A gallery of good hair days.' : 'Small paws. Endless possibilities.'} onClose={() => setModal(null)}>
+    {modal && <Modal title={MODAL_TITLES[modal]} onClose={() => setModal(null)}>
       {modal === 'gallery' ? <Gallery photos={photos} onRemove={(id) => setPhotos((previous) => previous.filter((photo) => photo.id !== id))} onClose={() => setModal(null)} />
+        : modal === 'booth' ? <PhotoBooth look={look} name={friend.name} scene={scene} onScene={setScene} onSound={playSound} onSnap={takePhoto} />
         : <div className="help-content">
           <div className="help-step"><span>1</span><div><h3>Meet your new bestie.</h3><p>Choose Mochi, Biscuit, or Cocoa. Each friend keeps their own look.</p></div></div>
           <div className="help-step"><span>2</span><div><h3>A little snip. A little magic.</h3><p>Pick a tool, then use a finger, mouse, or pen. Keep dragging with Brush: hair stays where you leave it. Trace a line with the gel Comb and the hair lies along it. Drag Snip to cut that spot, all the way down to a bald patch if you like, or hold Grow to make an area longer or bring bare scalp back. Hold Curl on the hair: the longer you hold, the curlier it gets. “Do all the hair” styles it all at once.</p></div></div>
-          <div className="help-step"><span>3</span><div><h3>Make it their own.</h3><p>Soap adds bubbles that stay until you Wash them off. Wash is a water sprayer: hold it on the hair and watch it get soaked, rinse clean and hang straight down. Hold and swipe with Blow-dry to whoosh the hair around. It flaps the way the air blows, dries the hair, and stays blown into a new shape! Try Color, or Dress up for new outfits and a little something on top. Undo a change any time.</p></div></div>
-          <div className="help-step"><span>4</span><div><h3>Say capy!</h3><p>“Picture perfect!” adds a snapshot to My gallery. Download it as a picture to keep or print.</p></div></div>
+          <div className="help-step"><span>3</span><div><h3>Make it their own.</h3><p>Soap adds bubbles that stay until you Wash them off. Wash is a water sprayer: hold it on the hair and watch it get soaked, rinse clean and hang straight down. Hold and swipe with Blow-dry to whoosh the hair around. It flaps the way the air blows, dries the hair, and stays blown into a new shape! Paint with Color: whole locks, dipped tips or a fade, or go rainbow or glitter. In Dress up, choose an outfit, a hat, glasses and a headband, then tap anywhere on your friend to add clips. Drag a clip to move it, or off to take it off. Poke an eye, boop the nose or the belly, or tickle an armpit to see what happens! Undo a change any time.</p></div></div>
+          <div className="help-step"><span>4</span><div><h3>Say capy!</h3><p>“Picture perfect!” opens the photo booth. Pick a background, a frame and a face, tap the picture to add stickers, then Snap! Your picture goes to My gallery, where you can download it to keep or print.</p></div></div>
           <div className="parent-note"><h3>A note for grown-ups</h3><p>No ads, accounts, purchases, or tracking. Looks stay on this device and browser, not in the cloud. Clearing browser data clears the gallery. Download favorites first. Sound is optional.</p><p>Keyboard: Tab to controls, Enter or Space to use them. On the capybara, Enter styles all hair. Arrow keys switch tool tabs. Escape closes this window.</p></div>
           <button className="primary-button" onClick={() => setModal(null)}>Let's play <Icon name="arrow" size={19} /></button>
         </div>}

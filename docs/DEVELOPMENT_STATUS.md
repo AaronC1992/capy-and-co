@@ -9,22 +9,24 @@ The fantasy RPG/VR project was cancelled before implementation. The current deli
 - Three original capybaras and an illustrated salon.
 - Mouse, pen, and touch interaction using shared gameplay actions.
 - Local per-strand brushing: only hair under the finger bends, each strand flexes along its length from a fixed root, swings and trails like loose hair, and the full brushed shape is saved.
-- 65 fine, independent strands with nine tools: brush, gel comb, snip, grow, curl, soap, wash (a water sprayer), blow-dry, and eight-color painting.
+- 65 fine, independent strands with nine tools: brush, gel comb, snip, grow, curl, soap, wash (a water sprayer), blow-dry, and color (eight colors, rainbow, and glitter, painted all over, on dipped tips, or as a fade).
 - A hairline that follows the head curve, with a color-matched scalp cover so brushing hair aside never shows a bald top.
 - A directional, flapping blow-dryer: it blows every strand in its stream the way the finger swipes, streams the hair out from the root, flaps it while the air is on it, dries it gradually, and keeps the swept shape.
 - A gel comb: the hair before the point the comb touches stays put, and everything from there to the tip is laid along the line the finger traces, side by side with its neighbors. The combed shape is saved.
 - A water sprayer: a spray bottle follows the finger, and the mist soaks the hair in its radius (darker sheen and droplets). Wet hair slides down and hangs straight, lying over the head instead of through the face. Soap, dye, and curls rinse out, and the hanging pose is saved.
 - Hold-to-curl: the longer a finger stays on a lock, the curlier it gets, from a wave to tight ringlets in about two seconds.
-- Faster hold-to-grow (0.5 length per second) and cutting to a bare scalp, which Grow can bring back.
+- Faster hold-to-grow (0.65 length per second, about 1.8 seconds from bare scalp to full length) and cutting to a bare scalp, which Grow can bring back.
 - Thick persistent lather that follows styled hair, rinses locally, and appears in saved/exported pictures.
 - Continuous position-based scissors and localized hold-to-grow, including repeated edits within one undoable touch.
-- 28 outfits in the Dress up tab (saved per friend, shown in saved pictures, and undoable), plus five accessories and removal.
+- 28 outfits in the Dress up tab (saved per friend, shown in saved pictures, and undoable), plus 12 hats, 9 pairs of glasses, 9 headbands, and up to 12 clips in 12 kinds that can be tapped on anywhere, ride along on the hair, and are dragged off to remove them.
+- A capybara that reacts to each tool (happy, surprised, giggling, squinting, breezy, and a shake after a soaking), and to being poked in the eye, booped on the nose or belly, or tickled under the arms, each with its own face, sound, and speech bubble.
+- A “Say capy!” photo booth: six backgrounds, five frames, four faces, and eight draggable stickers, saved with the picture.
 - Whole-head styling, gesture-level undo, undoable reset.
-- Responsive desktop, tablet, and phone layouts.
+- Responsive desktop, tablet, and phone layouts that show just the game: a slim header over the friends, studio, and tools, with no banner or footer.
 - Keyboard controls, visible focus, modal focus containment, reduced motion.
-- Optional synthesized sound.
+- Optional synthesized sound, with its own sound for every tool, dressing up, and the camera, spaced out so held tools do not buzz.
 - Local autosave and a 12-picture gallery with removal confirmation.
-- 800 x 1000 PNG picture generation.
+- 800 x 1000 PNG picture generation, including the photo booth scene and a caption.
 - Visible corrupt-save, storage-quota, audio, render, and export error handling.
 - Git initialization, lockfile, strict TypeScript, unit tests, and static production build.
 - Public hosting on GitHub Pages, deployed automatically from `main` by a workflow that runs the tests first, with a Play now button at the top of the README.
@@ -37,11 +39,11 @@ Executed during implementation:
 | Check | Result |
 | --- | --- |
 | TypeScript strict checking | Passed |
-| Vitest | 250 tests passed across 15 files; exit code 0 |
+| Vitest | 287 tests passed across 19 files; exit code 0 |
 | Vite production build | Passed |
 | Local server HTTP response | 200 |
 
-Tests cover real model transitions rather than just UI labels: single-lock editing, length bounds, curl/brush behavior, color/wash behavior, multi-lock stroke undo, friend isolation, accessory/reset undo, bounded history, whole-head edits, geometry picking, fast strokes, malformed saves, inaccessible storage, snapshots, and gallery eviction. Later milestones added tests for the local brush, the blow-dryer, the gel comb, the water sprayer, hold-to-curl, cutting to bald and regrowing, and the 28 outfits; each milestone section below lists what it covers.
+Tests cover real model transitions rather than just UI labels: single-lock editing, length bounds, curl/brush behavior, color/wash behavior, multi-lock stroke undo, friend isolation, accessory/reset undo, bounded history, whole-head edits, geometry picking, fast strokes, malformed saves, inaccessible storage, snapshots, and gallery eviction. Later milestones added tests for the local brush, the blow-dryer, the gel comb, the water sprayer, hold-to-curl, cutting to bald and regrowing, the 28 outfits, dye effects, hats, glasses, headbands, and clips, sounds and reactions, the photo booth, and pokes and tickles; each milestone section below lists what it covers.
 
 ### Continuous-touch refinement
 
@@ -318,6 +320,44 @@ Verification:
 - The final-build sweep below predates these outfits and covered the first 18.
 - Not verified: a real tablet, how comfortable the tiles are to tap, and the browser's real download event (the embedded browser does not emit one, so the exported Blob was inspected instead).
 
+### Just the game, dye effects, accessories anywhere, sounds and reactions, and the photo booth
+
+Feedback: remove the banner and the footer so the page is just the playable game; add color effects (tips, fade, rainbow, glitter); let accessories go anywhere, with several clips plus hats, glasses, and headbands; give each tool its own sound and the capybara its own reactions; add a photo booth; and make the hair grow a little faster.
+
+Change:
+
+- **Just the game.** The hero banner, the captions, and the footer are gone. The header keeps the logo, the sound toggle, My gallery, and How to play, which is now the only route to the help. At 1024 x 768 the whole game fits without scrolling.
+- **Faster growth.** `GROWTH_PER_SECOND` went from 0.5 to 0.65, so regrowing from bare scalp to full length takes about 1.8 seconds of holding instead of 2.4.
+- **Dye effects.** The Color tab has three dye modes (All over, Dipped tips, Fade) and two new paints, Rainbow and Glitter. Strands gained optional `tip`, `fade`, `rainbow`, and `glitter` fields. Tips and fades are drawn with a per-strand gradient that follows the lock even when it is curled or blown, the scalp cover takes on each lock's root color, and glitter twinkles on top of any color. Water rinses every kind of dye and glitter out, and shaving keeps the color (and rainbow) for regrowth but drops the tips and glitter.
+- **Accessories anywhere.** The single accessory became a hat (5), glasses (4), a headband (4), and up to 12 clips in six kinds (bow, daisy, star, cherries, heart, butterfly). Tapping a worn hat, pair of glasses, or headband takes it off. In Dress up a tap on the capybara puts the chosen clip there; a clip put down on the hair holds that lock and moves with it, and a clip can be dragged somewhere else or off the capybara to take it off. **Take off the clips** removes them all. The hat sits on a shaved head and rides higher on long hair. Glasses are drawn under hair that falls over the face; the headband, hat, and clips go over the hair. Old single-accessory saves migrate (the crown becomes a hat, the rest become a clip in the same spot), and the save envelope is now version 3.
+- **Sounds and reactions.** Every tool has its own synthesized sound (a twinkling scale for Grow), plus a pop for dressing up and stickers, a chime for choosing a friend or a booth option, and a shutter for the camera. `SOUND_GAPS` spaces out repeats of the same sound so held tools hum along without delaying other sounds. Sound is still optional and off by default. The capybara reacts to each tool for about a second: happy for brushing, combing, growing, curling, coloring, and clipping, surprised (with a little hop) at a snip, giggling under soap, squinting in the spray and shaking the water off afterwards, and breezy with fluttering ears under the dryer.
+- **Photo booth.** “Picture perfect!” opens the “Say capy!” booth: 6 backgrounds, 5 frames, 4 faces, and 8 stickers (up to 10 on a picture). Tap a sticker or the picture to add one, drag to move it, or drag it off the picture to peel it off. **Snap!**, right under the picture, flashes, saves the look and the scene to My gallery, and opens it. The scene is kept for the next picture until a reload. Photos gained an optional `scene`; older photos show the plain studio. Download puts the scene on the 800 x 1000 card above its caption.
+
+Verification:
+
+- Typecheck, the production build, and 281 tests in 18 files pass (exit code 0).
+- Tests: `model.test.ts` (dipping tips and fading over the existing color, rainbow replacing other dye, glitter adding without stacking, paint that is not a color ignored, washing and rinsing every kind of dye; one hat, pair of glasses, and headband at a time, each one undo; clips up to the limit, one undo per change, broken clips rejected), `accessories.test.ts` (clips anchoring to the nearest lock and moving with it, where clips can be worn, the hat height on short and long hair, picking the top clip and finding free spots), `audio.test.ts` (a sound for every tool and moment, spacing repeats without delaying other sounds), `photoBooth.test.ts` (scene validation, sticker clamping and the 10-sticker limit, free spots, picking the top sticker, moving and peeling), `storage.test.ts` (dye fields, accessories, and booth scenes surviving a reload, broken ones rejected, single-accessory saves migrating to hats and clips, scenes snapshotted with the photo), `hairEditing.test.ts` (growth at `GROWTH_PER_SECOND`), and `render.test.tsx` (no banner or footer and help still in the header, accessories drawn in the right layers, dye gradients and glitter, a different face for each mood and the shake drops, every picker tile named and pressed correctly, tapping to wear and take off, every booth background and frame drawn differently with only defined gradients, the booth's drawing order, dragged stickers, booth taps and sounds, and the gallery showing booth and older photos).
+- Chromium mouse on the Vite dev server (1024 x 768): the page held only the header and the game, with no `footer` element, and was 768 pixels tall. In the Color tab, Dipped tips, Fade, and Rainbow each gave all 65 strands a gradient stroke after “Do all the hair”, and Glitter then added 130 sparkles over the rainbow, with the capybara showing its happy face. In Dress up, taps on the body and on the hair each added a clip, dragging one off the capybara drew it faded and then took it off, and tapping the worn Party hat took it off. The help dialog showed the new steps and scrolled at 1024 x 768. No console errors or warnings.
+- Photo booth, same setup: all 6 backgrounds, 5 frames, and 4 faces were inspected visually. Tapping added stickers, a drag moved one (drawn lifted), and dragging one off the picture faded it and peeled it off. Snap! flashed, disabled itself while it fired, saved the scene with its stickers to My gallery, switched to the gallery, and showed “Picture added to your gallery!”. The Download PNG (captured by intercepting the link click, because the embedded browser emits no download event) was an 800 x 1000 card showing the scene and the caption. At a phone width the picture came first, then Snap!, then the pickers. Snap! was moved from below the pickers to right under the picture after it turned out to be below the fold at 1024 x 768.
+- Not verified: the sounds by ear on a real device, how the reactions and clip dragging feel under a finger on a real tablet, and the browser's real download event.
+
+### Glitter that shows, poke and tickle reactions, and 23 more accessories
+
+Feedback: glitter hair did not seem to change anything; add reactions to poking an eye, tickling the nose, hitting the belly, and tickling the armpits; and add at least 20 more accessories.
+
+Change:
+
+- **Glitter fix.** Glitter was being painted, but every sparkle was in the top-left corner of the picture, out of sight. The twinkle animation scales each sparkle with CSS `transform`, and a CSS `transform` replaces an SVG element's `transform` attribute, which is where each sparkle's position along its lock was. Each sparkle is now placed by a group around it and only the sparkle inside twinkles. Glittery locks also get a dotted line of glitter dust along their whole length, so glitter shows even between the twinkles.
+- **Poke and tickle reactions.** Touching the capybara where there is no hair gets a reaction with its own face, sound, and speech bubble. Tap an eye and it flinches, squeezes that eye shut and stares with the other ("Hey!", with stars). Tap the nose and it squints and sneezes ("Achoo!", with puffs). Tap the belly and it jiggles ("Boing!"). Rub back and forth on an armpit, or the belly, and it squirms and giggles ("Hee hee!") for as long as the tickling goes on. Poking again starts the reaction over. A touch that moves any hair is always styling, so the hair comes first. In Dress up, tapping an eye or the nose reacts instead of putting a clip there. New sounds: `poke`, `sneeze`, `boing`, and `giggle`.
+- **23 more accessories.** Hats (12): Cowboy hat, Chef hat, Witch hat, Pirate hat, Ball cap, Sparkly tiara, and Berry beanie are new. Glasses (9): Cat-eye glam, Swim goggles, Fancy monocle, Silly disguise (with a big nose and a mustache), and Rainbow specs. Headbands (9): Unicorn horn, Bee antennae, Teddy ears, Reindeer antlers, and Angel halo, which floats just above the hair, or above the hat when one is on, and bobs gently. Clips (12 kinds): Moon, Rainbow, Strawberry, Seashell, Snowflake, and Ladybug. Every picker grid fills whole rows. Saves need no migration: older saves simply never wore the new items.
+
+Verification:
+
+- Typecheck, the production build, and 287 tests in 19 files pass (exit code 0).
+- Tests: `reactions.test.ts` (the touch spots, which reaction each spot and a rub give, a quick tap is a poke but a long press or a slide is not, rubbing back and forth is a tickle but dragging straight through or a small wobble is not), `render.test.tsx` (glitter sparkles drawn in their own lock, each placed by a group around it rather than by a transform the twinkle would replace, and a glitter dust line for each glittery lock; each reaction's face, bubble, stars, and puffs, and a restart class that alternates; the halo above the hair, rising with longer hair, above a taller hat, and kept inside the picture), and `audio.test.ts` (a sound for each reaction). The accessory picker, wearing, undo, and storage tests loop over the item lists, so they cover the new items too; `storage.test.ts` had used `monocle` as an example of glasses that do not exist and now uses `telescope`. The outfit test that draws the capybara 84 times took about 4.7 of Vitest's default 5 seconds and failed now and then on a busy machine, which would also stop a deployment, so it now has a 20-second limit.
+- Chromium mouse on the Vite dev server: Glitter painted on long hair showed sparkles along every lock and the glitter dust. On Biscuit, a tap on each eye, the nose, and the belly, and a rub on each armpit and the belly, showed the matching face, bubble, and stars, puffs, or lines, and a second poke restarted the flinch. In Dress up, a tap on an eye or the nose reacted without adding a clip, and a tap on the belly added a clip. All 23 new picker icons, and every new hat, pair of glasses, headband, and clip worn on Biscuit with long hair, were inspected; the halo was moved from a fixed height to above the hair and the hat after it showed up tangled in long hair. No console errors or warnings.
+- Not verified: how pokes and tickles feel under a real finger on a tablet, and the new sounds by ear on a real device.
+
 ### Final-build sweep, reload checks, and frame rate
 
 Run against a production build of the final code (`vite preview`) in headless desktop Chromium with a real mouse. The sweep and the two reload runs listened for page errors, console errors and warnings, external requests, and on-page alerts.
@@ -356,7 +396,7 @@ These are browser checks, not certification of real iOS, Android, or Amazon tabl
 Use a current Chrome/Edge desktop browser, Android Chrome, and iPad/iPhone Safari. Check both portrait and landscape.
 
 - [ ] Open the network or hosted HTTPS URL.
-- [ ] All three friends, tools, colors, and accessory controls are comfortably tappable.
+- [ ] All three friends, tools, colors, dye modes, accessory, and photo booth controls are comfortably tappable.
 - [ ] Drag across several locks; confirm one Undo reverses the full gesture.
 - [ ] With Brush, drag a fingertip through one small patch of hair; only the strands under your finger should bend, with the neighbors easing off gradually. Brush right, left, up, and down without lifting; the hair should stay where you leave it after release and reload.
 - [ ] With Comb, press on a strand partway along its length and drag a path: the hair before your finger should stay put, and the hair from your finger outward should follow the path you traced, side by side with its neighbors and without swinging. It should stay there after you lift and after a reload. A quick tap or a wobble should not move anything.
@@ -368,13 +408,17 @@ Use a current Chrome/Edge desktop browser, Android Chrome, and iPad/iPhone Safar
 - [ ] With Grow, hold one patch still, slide to another, then release; growth should follow the finger and stop immediately on release. A hold of about a second should visibly lengthen the hair.
 - [ ] With Curl, hold one patch still: the longer you hold, the curlier it should get (about 2 seconds to tight ringlets), and it should stop the moment you lift. Slide your finger across more hair to curl several patches. Reload and confirm the curls stay.
 - [ ] Cut a lock short, then regrow it. Try brush, curls, dye, and wash.
-- [ ] With Snip, cut a patch right down to the scalp: it should look bald, with no leftover bits of hair. Hold Grow on that patch: the hair should grow back in its own color, reaching full length in about 2.4 seconds. Reload and confirm a bald patch stays bald.
+- [ ] With Snip, cut a patch right down to the scalp: it should look bald, with no leftover bits of hair. Hold Grow on that patch: the hair should grow back in its own color, reaching full length in about 1.8 seconds. Reload and confirm a bald patch stays bald.
 - [ ] Touches on the face/background do not change hair.
 - [ ] A second finger does not trigger an extra styling gesture.
 - [ ] Lift a finger outside the character; the next gesture still works.
 - [ ] Scroll outside the character, rotate the device, and keep playing.
 - [ ] Open Dress up and tap through all 28 outfits: exactly one is highlighted at a time and the capybara wears it. Save a picture and download a PNG while wearing an outfit and confirm both show it. Undo steps back one outfit at a time, Reset returns the cozy cape, and each friend keeps her own outfit.
-- [ ] Apply accessories and reset; undo both operations.
+- [ ] Paint a few locks with Dipped tips, Fade, Rainbow, and Glitter; they should look different from each other and from plain color, and Wash should rinse each one out.
+- [ ] Put on a hat, glasses, and a headband, and tap each again to take it off. Try the Angel halo with short hair, long hair, and a hat: it should float just above whichever is on top. Tap clips onto the hair, the head, and the body; brush the clipped hair and check its clip moves with it. Drag a clip to a new spot, then drag one off the capybara. Reset, then undo.
+- [ ] With sound on, try every tool and listen for its own sound; holding a tool should hum, not buzz. Watch the capybara react to each tool.
+- [ ] On a friend with short hair, tap each eye, the nose, and the belly, and rub back and forth on each armpit and the belly; each should get its own face, sound, and bubble. Paint a few locks with Glitter and check it sparkles.
+- [ ] In the photo booth, pick a background, frame, and face, tap on stickers, drag one, and drag one off the picture. Snap! and check the gallery and the downloaded PNG both show the scene.
 - [ ] Save a picture, close/reopen the browser, and find it in My gallery.
 - [ ] Download a PNG and open it from the device's Files/Downloads app.
 - [ ] Cancel picture removal, then confirm removal.
@@ -384,18 +428,21 @@ Use a current Chrome/Edge desktop browser, Android Chrome, and iPad/iPhone Safar
 
 ## Known limitations and next milestone
 
-Hosted publicly on GitHub Pages at https://aaronc1992.github.io/capy-and-co/ (see "GitHub Pages deployment" above). There is no native installer, service worker/offline launch, or cloud gallery. Browser storage is per origin and can be cleared by the device, so pictures saved on one device or browser do not appear on another. Hair consists of stylized editable locks, not fluid strand simulation; accessories and outfits use predefined positions.
+Hosted publicly on GitHub Pages at https://aaronc1992.github.io/capy-and-co/ (see "GitHub Pages deployment" above). There is no native installer, service worker/offline launch, or cloud gallery. Browser storage is per origin and can be cleared by the device, so pictures saved on one device or browser do not appear on another. Hair consists of stylized editable locks, not fluid strand simulation; outfits, hats, glasses, and headbands use predefined positions, while clips and stickers can be placed anywhere.
 
 Limitations of the newest features:
 
 - A whole head of full curls under the blow-dryer is the slowest thing the game draws: about 12 to 15 fps against about 34 for straight hair, in headless desktop Chromium with software rendering. A curled strand is drawn through 73 points against 13 to 25 for a straight one. Brush, Comb, and Wash straighten hair, so the slowdown goes away once the curls are styled out. A real tablet has not been tested. If a tablet stutters, the first thing to try is lowering `CURL_DENSITY`, or drawing curly strands with fewer points while the dryer is running.
-- Outfits and accessories have fixed placements; they do not adapt to the hair or to movement.
+- Outfits, glasses, and headbands have fixed placements and do not adapt to the hair or to movement; the hat and the halo only rise and fall with the hair's length.
+- The poke and tickle spots are fixed ovals on the face and body. Hair always comes first, so long hair hanging over the eyes or nose gets styled instead of poked, and a friend has to be poked where her hair is not. Clips follow the lock they hold, but a clip put down away from the hair stays put.
+- A clip holds a point a set share of the way along one lock, so cutting or growing that lock slides the clip toward or away from the roots, and on a shaved lock it sits at the scalp. Clips do not hold hair in place against brushing or blowing.
+- The booth's scene is remembered only until a reload; each saved picture keeps its own.
 - The small picker tile's frame trims a few units off the Butterfly dress's wing tips. The capybara and saved pictures show the full wings.
 - Drying sprayed hair lowers its wetness but does not make it fluff back up by itself: it stays hanging until it is brushed, combed, or blown into a new shape.
 - Water rinses a strand as soon as the mist reaches it: the soap comes off, the dye returns to the friend's natural color, and curls straighten (the same as Wash always has); the haircut stays. Spray before coloring or curling, not after.
 - Cutting to the scalp clears the strand's brushed pose, curl, soap, and water (the color is kept), so Grow brings it back in the same color but without the old style.
 - The comb's tail runs about 8 units to the side of the finger's own line. That is the designed gel bend (`GEL_TURN`), tuned by eye.
 - Friend cards show only the head and hair, cropped above the clothes.
-- Speeds and sizes were tuned by eye on a desktop and may need adjusting after a tablet playtest: `CURL_PER_SECOND`, `GROWTH_PER_SECOND`, `BALD_REACH`, `COMB_RADIUS`, `GEL_TURN`, `SPRAY_RADIUS`, and `WET_RATE`.
+- Speeds and sizes were tuned by eye on a desktop and may need adjusting after a tablet playtest: `CURL_PER_SECOND`, `GROWTH_PER_SECOND`, `BALD_REACH`, `COMB_RADIUS`, `GEL_TURN`, `SPRAY_RADIUS`, `WET_RATE`, and the poke and tickle limits (`POKE_SLIDE`, `POKE_TIME`, `RUB_STEP`, `RUB_TURNS`).
 
 Next: a supervised real-tablet playtest using the hosted link, paying particular attention to how the comb, hold-to-curl, and sprayer feel and to blow-dryer smoothness on curly hair; any resulting touch/feedback improvements; and verified native-browser downloads. More content can follow after that feedback.

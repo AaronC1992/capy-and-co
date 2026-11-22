@@ -1,17 +1,32 @@
-import { ACCESSORIES, CHARACTERS, createLooks, DEFAULT_OUTFIT, HAIR_BEND_LIMITS, HAIR_GROUP_COUNT, OUTFITS, STRAND_COUNT } from './model'
+import { CHARACTERS, createLooks, DEFAULT_OUTFIT, GLASSES, HAIR_BEND_LIMITS, HAIR_GROUP_COUNT, HATS, HEADBANDS, HEX_COLOR, isClip, MAX_CLIPS, OUTFITS, STRAND_COUNT } from './model'
 import { isHairShape, MIN_LENGTH } from './hairLayout'
-import type { CharacterId, Look, Looks, Outfit, Strand } from './model'
+import { isScene } from './photoBooth'
+import type { Scene } from './photoBooth'
+import type { CharacterId, Clip, Look, Looks, Outfit, Strand } from './model'
 
 export const STORAGE_KEY = 'capy-and-co:v1'
 export const MAX_PHOTOS = 12
-export interface Photo { id: string; look: Look; createdAt: string }
-export interface SavedGame { version: 2; active: CharacterId; looks: Looks; photos: Photo[]; sound: boolean }
+// Photos from before the photo booth have no scene.
+export interface Photo { id: string; look: Look; createdAt: string; scene?: Scene }
+export interface SavedGame { version: 3; active: CharacterId; looks: Looks; photos: Photo[]; sound: boolean }
 // Saves made when curls were simply on or off hold a yes or no instead of how curly the hair is,
 // and saves from before dress-up have no outfit at all.
 type StoredStrand = Omit<Strand, 'curl'> & { curl: number | boolean }
-type StoredLook = Omit<Look, 'hair' | 'outfit'> & { outfit?: Outfit; hair: StoredStrand[] }
+// Saves from before hats, glasses and clips wore one little accessory on the head instead.
+const LEGACY_ACCESSORIES = ['none', 'bow', 'flower', 'crown', 'cherries', 'star'] as const
+type LegacyAccessory = typeof LEGACY_ACCESSORIES[number]
+// Where those accessories sat, so they come back as clips in the same spot.
+const LEGACY_CLIPS: Partial<Record<LegacyAccessory, Clip>> = {
+  bow: { kind: 'bow', x: 300, y: 172 },
+  flower: { kind: 'daisy', x: 312, y: 186 },
+  cherries: { kind: 'cherries', x: 303, y: 165 },
+  star: { kind: 'star', x: 303, y: 178 },
+}
+type Wearables = Pick<Look, 'hat' | 'glasses' | 'headband' | 'clips'>
+type StoredWear = (Wearables & { accessory?: undefined }) | ({ accessory: LegacyAccessory } & Partial<Record<keyof Wearables, undefined>>)
+type StoredLook = Omit<Look, 'hair' | 'outfit' | keyof Wearables> & { outfit?: Outfit; hair: StoredStrand[] } & StoredWear
 type StoredGame = Omit<SavedGame, 'version' | 'looks' | 'photos'> & {
-  version: 1 | 2
+  version: 1 | 2 | 3
   looks: Record<CharacterId, StoredLook>
   photos: (Omit<Photo, 'look'> & { look: StoredLook })[]
 }
@@ -20,7 +35,7 @@ export interface StoragePort { getItem(key: string): string | null; setItem(key:
 const LEGACY_CURL = 0.4
 
 export function freshSave(): SavedGame {
-  return { version: 2, active: 'mochi', looks: createLooks(), photos: [], sound: false }
+  return { version: 3, active: 'mochi', looks: createLooks(), photos: [], sound: false }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -35,25 +50,44 @@ function isOptionalBoundedNumber(value: unknown, min: number, max: number): bool
   return value === undefined || (typeof value === 'number' && Number.isFinite(value) && value >= min && value <= max)
 }
 
+function isOptionalBoolean(value: unknown): boolean {
+  return value === undefined || typeof value === 'boolean'
+}
+
+function isHexColor(value: unknown): boolean {
+  return typeof value === 'string' && HEX_COLOR.test(value)
+}
+
+function isWorn(value: Record<string, unknown>): boolean {
+  if (value.accessory !== undefined) {
+    return LEGACY_ACCESSORIES.some((item) => item === value.accessory)
+      && value.hat === undefined && value.glasses === undefined && value.headband === undefined && value.clips === undefined
+  }
+  return HATS.some((item) => item === value.hat) && GLASSES.some((item) => item === value.glasses) && HEADBANDS.some((item) => item === value.headband)
+    && Array.isArray(value.clips) && value.clips.length <= MAX_CLIPS && value.clips.every(isClip)
+}
+
 export function isLook(value: unknown, legacy = false): value is StoredLook {
-  if (!isRecord(value) || !isCharacter(value.character) || !ACCESSORIES.some((a) => a === value.accessory)) return false
+  if (!isRecord(value) || !isCharacter(value.character) || !isWorn(value)) return false
   if (value.outfit !== undefined && !OUTFITS.some((o) => o === value.outfit)) return false
   return Array.isArray(value.hair) && (value.hair.length === STRAND_COUNT || (legacy && value.hair.length === HAIR_GROUP_COUNT)) && value.hair.every((strand: unknown) =>
     isRecord(strand)
     && typeof strand.length === 'number' && Number.isFinite(strand.length) && strand.length >= MIN_LENGTH && strand.length <= 1
-    && typeof strand.color === 'string' && /^#[0-9a-f]{6}$/i.test(strand.color)
+    && isHexColor(strand.color)
     && (typeof strand.curl === 'boolean' || (typeof strand.curl === 'number' && Number.isFinite(strand.curl) && strand.curl >= 0 && strand.curl <= 1))
     && typeof strand.flow === 'number' && Number.isFinite(strand.flow) && strand.flow >= -1 && strand.flow <= 1
     && isOptionalBoundedNumber(strand.bendX, HAIR_BEND_LIMITS.minX, HAIR_BEND_LIMITS.maxX)
     && isOptionalBoundedNumber(strand.bendY, HAIR_BEND_LIMITS.minY, HAIR_BEND_LIMITS.maxY)
     && isOptionalBoundedNumber(strand.wetness, 0, 1)
     && (strand.shape === undefined || isHairShape(strand.shape))
-    && (strand.soapy === undefined || typeof strand.soapy === 'boolean'),
+    && isOptionalBoolean(strand.soapy)
+    && (strand.tip === undefined || isHexColor(strand.tip))
+    && isOptionalBoolean(strand.fade) && isOptionalBoolean(strand.rainbow) && isOptionalBoolean(strand.glitter),
   )
 }
 
 function isSave(value: unknown): value is StoredGame {
-  if (!isRecord(value) || (value.version !== 1 && value.version !== 2) || !isCharacter(value.active) || typeof value.sound !== 'boolean' || !isRecord(value.looks)) return false
+  if (!isRecord(value) || ![1, 2, 3].includes(value.version as number) || !isCharacter(value.active) || typeof value.sound !== 'boolean' || !isRecord(value.looks)) return false
   // An already-open tab can save its old 13-strand state during a development refresh.
   const looks = value.looks
   if (!CHARACTERS.every(({ id }) => isLook(looks[id], true) && looks[id].character === id)) return false
@@ -61,7 +95,7 @@ function isSave(value: unknown): value is StoredGame {
   const ids = new Set<string>()
   return value.photos.every((photo: unknown) => {
     if (!isRecord(photo) || typeof photo.id !== 'string' || !photo.id || ids.has(photo.id) || !isLook(photo.look, true)
-      || typeof photo.createdAt !== 'string' || !Number.isFinite(Date.parse(photo.createdAt))) return false
+      || typeof photo.createdAt !== 'string' || !Number.isFinite(Date.parse(photo.createdAt)) || (photo.scene !== undefined && !isScene(photo.scene))) return false
     ids.add(photo.id)
     return true
   })
@@ -72,11 +106,24 @@ function readCurl(curl: number | boolean): number {
   return curl ? LEGACY_CURL : 0
 }
 
+function readWearables(look: StoredLook): Wearables {
+  if (look.accessory !== undefined) {
+    const clip = LEGACY_CLIPS[look.accessory]
+    return { hat: look.accessory === 'crown' ? 'crown' : 'none', glasses: 'none', headband: 'none', clips: clip ? [{ ...clip }] : [] }
+  }
+  return { hat: look.hat, glasses: look.glasses, headband: look.headband, clips: look.clips.map((clip) => ({ ...clip })) }
+}
+
 function readLook(look: StoredLook): Look {
   const hair = look.hair.length === STRAND_COUNT
     ? look.hair
     : Array.from({ length: STRAND_COUNT }, (_, index) => look.hair[index % HAIR_GROUP_COUNT])
-  return { ...look, outfit: look.outfit ?? DEFAULT_OUTFIT, hair: hair.map((strand) => ({ ...strand, curl: readCurl(strand.curl) })) }
+  return {
+    character: look.character,
+    outfit: look.outfit ?? DEFAULT_OUTFIT,
+    ...readWearables(look),
+    hair: hair.map((strand) => ({ ...strand, curl: readCurl(strand.curl) })),
+  }
 }
 
 export function loadGame(storage: StoragePort): { data: SavedGame; error: string | null } {
@@ -86,7 +133,7 @@ export function loadGame(storage: StoragePort): { data: SavedGame; error: string
     const parsed: unknown = JSON.parse(text)
     if (!isSave(parsed)) throw new Error('The saved salon data has an invalid format.')
     return { data: {
-      ...parsed, version: 2,
+      ...parsed, version: 3,
       looks: { mochi: readLook(parsed.looks.mochi), biscuit: readLook(parsed.looks.biscuit), cocoa: readLook(parsed.looks.cocoa) },
       photos: parsed.photos.map((photo) => ({ ...photo, look: readLook(photo.look) })),
     }, error: null }
@@ -106,6 +153,8 @@ export function saveGame(storage: StoragePort, data: SavedGame): string | null {
   }
 }
 
-export function addPhoto(photos: Photo[], look: Look, id: string, date: string): Photo[] {
-  return [{ id, createdAt: date, look: { ...look, hair: look.hair.map((strand) => ({ ...strand })) } }, ...photos].slice(0, MAX_PHOTOS)
+export function addPhoto(photos: Photo[], look: Look, id: string, date: string, scene?: Scene): Photo[] {
+  const photo: Photo = { id, createdAt: date, look: { ...look, hair: look.hair.map((strand) => ({ ...strand })), clips: look.clips.map((clip) => ({ ...clip })) } }
+  if (scene) photo.scene = { ...scene, stickers: scene.stickers.map((sticker) => ({ ...sticker })) }
+  return [photo, ...photos].slice(0, MAX_PHOTOS)
 }

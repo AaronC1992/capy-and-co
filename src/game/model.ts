@@ -1,4 +1,4 @@
-import { HAIR_GROUP_COUNT, HAIR_SHAPE_LENGTH, isBald, MIN_LENGTH, normalizeShape, scaleShape, STRAND_COUNT, STRANDS_PER_GROUP, strandReach } from './hairLayout'
+import { HAIR_GROUP_COUNT, HAIR_POINTS, HAIR_SHAPE_LENGTH, isBald, MIN_LENGTH, normalizeShape, scaleShape, STRAND_COUNT, STRANDS_PER_GROUP, strandReach } from './hairLayout'
 import type { HairShape } from './hairLayout'
 
 export { HAIR_GROUP_COUNT, STRAND_COUNT, STRANDS_PER_GROUP }
@@ -11,8 +11,20 @@ export const CHARACTERS = [
 
 export type CharacterId = typeof CHARACTERS[number]['id']
 export type Tool = 'brush' | 'comb' | 'snip' | 'grow' | 'curl' | 'soap' | 'wash' | 'blower' | 'color'
-export const ACCESSORIES = ['none', 'bow', 'flower', 'crown', 'cherries', 'star'] as const
-export type Accessory = typeof ACCESSORIES[number]
+// Things to wear on top: one hat, one pair of glasses and one headband at a time, plus clips put anywhere.
+export const HATS = ['none', 'crown', 'party', 'beanie', 'sunhat', 'tophat', 'cowboy', 'chef', 'witch', 'pirate', 'cap', 'tiara', 'strawberry'] as const
+export const GLASSES = ['none', 'round', 'hearts', 'stars', 'shades', 'cateye', 'goggles', 'monocle', 'disguise', 'rainbow'] as const
+export const HEADBANDS = ['none', 'ribbon', 'bunny', 'kitty', 'flowers', 'unicorn', 'bee', 'bear', 'antlers', 'halo'] as const
+export const CLIP_KINDS = ['bow', 'daisy', 'star', 'cherries', 'heart', 'butterfly', 'moon', 'rainbow', 'strawberry', 'shell', 'snowflake', 'ladybug'] as const
+export const MAX_CLIPS = 12
+export type Hat = typeof HATS[number]
+export type Glasses = typeof GLASSES[number]
+export type Headband = typeof HEADBANDS[number]
+export type ClipKind = typeof CLIP_KINDS[number]
+export const WEARABLES = { hat: HATS, glasses: GLASSES, headband: HEADBANDS } as const
+export type WearSlot = keyof typeof WEARABLES
+// The studio picture the capybara is drawn in; clips can go anywhere inside it.
+export const STAGE = { width: 500, height: 520 } as const
 // Clothes to dress up in, in the order they are offered. The first is what every capybara starts out wearing.
 export const OUTFITS = [
   'cozy', 'hero', 'sweater', 'overalls', 'princess', 'tutu', 'hoodie', 'raincoat', 'party',
@@ -23,6 +35,13 @@ export type Outfit = typeof OUTFITS[number]
 export const DEFAULT_OUTFIT: Outfit = 'cozy'
 export const COLORS = ['#eb9c95', '#b5a0d8', '#8cbfc4', '#a6bd87', '#e5b75c', '#c07955', '#6e5147', '#f3e1bd'] as const
 export const COLOR_NAMES = ['Strawberry', 'Lavender', 'Blueberry', 'Pistachio', 'Honey', 'Caramel', 'Chocolate', 'Vanilla'] as const
+// Special paints offered beside the plain colors: a rainbow from root to tip, and glitter that sparkles on top of any color.
+export const RAINBOW = 'rainbow'
+export const GLITTER = 'glitter'
+// Where a plain color goes: the whole lock, just the tips with a crisp line, or the tips blending in from the roots.
+export const DYE_MODES = ['whole', 'tips', 'fade'] as const
+export type DyeMode = typeof DYE_MODES[number]
+export const HEX_COLOR = /^#[0-9a-f]{6}$/i
 export const HAIR_BEND_LIMITS = { minX: -95, maxX: 95, minY: -65, maxY: 85 } as const
 // Pressing "do all the hair" with the curl tool winds every strand this much more; three presses make it fully curly.
 const CURL_PER_PRESS = 0.34
@@ -40,13 +59,31 @@ export interface Strand {
   shape?: HairShape
   soapy?: boolean
   wetness?: number
+  // Dyed ends: the tips are this color, dipped with a crisp line, or blending in from the roots when `fade` is set.
+  tip?: string
+  fade?: boolean
+  // Rainbow hair runs through every rainbow color from root to tip, ignoring `color` and `tip`.
+  rainbow?: boolean
+  glitter?: boolean
+}
+
+// A clip where it was put. A clip put on the hair holds the lock `strand` at its point `step`, and moves with it.
+export interface Clip {
+  kind: ClipKind
+  x: number
+  y: number
+  strand?: number
+  step?: number
 }
 
 export interface Look {
   character: CharacterId
   hair: Strand[]
-  accessory: Accessory
   outfit: Outfit
+  hat: Hat
+  glasses: Glasses
+  headband: Headband
+  clips: Clip[]
 }
 
 export interface HairLengthEdit {
@@ -94,12 +131,15 @@ export interface SalonState {
 
 export type SalonAction =
   | { type: 'select'; character: CharacterId }
-  | { type: 'style'; tool: Tool; strands: number[]; color: string; direction: number; checkpoint: boolean }
+  // `color` is a #rrggbb color, RAINBOW or GLITTER; `dye` says where a plain color goes (the whole lock if omitted).
+  | { type: 'style'; tool: Tool; strands: number[]; color: string; direction: number; checkpoint: boolean; dye?: DyeMode }
   | { type: 'pose'; locks: HairPoseEdit[]; checkpoint: boolean }
   | { type: 'lengths'; edits: HairLengthEdit[]; checkpoint: boolean }
   | { type: 'curl'; edits: HairCurlEdit[]; checkpoint: boolean }
   | { type: 'air'; edits: HairAirEdit[]; checkpoint: boolean }
-  | { type: 'accessory'; accessory: Accessory }
+  | { type: 'wear'; slot: WearSlot; item: string }
+  // Every clip being worn, after one was put on, moved or taken off.
+  | { type: 'clips'; clips: Clip[] }
   | { type: 'outfit'; outfit: Outfit }
   | { type: 'undo' }
   | { type: 'reset' }
@@ -108,8 +148,11 @@ export function createLook(character: CharacterId): Look {
   const friend = CHARACTERS.find((item) => item.id === character)!
   return {
     character,
-    accessory: 'none',
     outfit: DEFAULT_OUTFIT,
+    hat: 'none',
+    glasses: 'none',
+    headband: 'none',
+    clips: [],
     hair: Array.from({ length: STRAND_COUNT }, (_, i) => ({
       length: i % HAIR_GROUP_COUNT > 10 ? 0.45 : 0.52 + Math.sin(i % HAIR_GROUP_COUNT * 0.75) * 0.13,
       color: friend.hair,
@@ -140,10 +183,54 @@ function resized(strand: Strand, index: number, length: number): Strand {
   return withShape({ ...strand, length }, scaleShape(strand.shape, strandReach(length, index) / strandReach(strand.length, index)))
 }
 
-// Hair cut right down to the scalp is gone, and its brushed pose, soap, water and curls go with it. The color stays
-// for when it grows back.
+// Hair cut right down to the scalp is gone, and its brushed pose, soap, water, curls, dyed tips and glitter go with it.
+// The color stays for when it grows back.
 function shorn(strand: Strand): Strand {
-  return { length: MIN_LENGTH, color: strand.color, curl: 0, flow: strand.flow }
+  return { length: MIN_LENGTH, color: strand.color, curl: 0, flow: strand.flow, ...(strand.rainbow ? { rainbow: true } : {}) }
+}
+
+function withoutDye(strand: Strand): Strand {
+  const next = { ...strand }
+  delete next.tip
+  delete next.fade
+  delete next.rainbow
+  return next
+}
+
+export function isDyed(strand: Strand, natural: string): boolean {
+  return strand.color !== natural || strand.tip !== undefined || strand.rainbow === true || strand.glitter === true
+}
+
+// Paints one lock. Glitter is added over whatever color is there; rainbow and plain colors replace the old dye.
+export function dyeStrand(strand: Strand, paint: string, mode: DyeMode = 'whole'): Strand {
+  if (paint === GLITTER) return strand.glitter ? strand : { ...strand, glitter: true }
+  if (paint === RAINBOW) return { ...withoutDye(strand), rainbow: true }
+  if (!HEX_COLOR.test(paint)) return strand
+  if (mode === 'whole') return { ...withoutDye(strand), color: paint }
+  return { ...withoutDye(strand), tip: paint, ...(mode === 'fade' ? { fade: true } : {}) }
+}
+
+// Water washes soap, every kind of dye and the curl out, back to the friend's natural color.
+function rinse(strand: Strand, natural: string): Strand {
+  const next = { ...withoutDye(strand), color: natural, curl: 0, soapy: false }
+  delete next.glitter
+  return next
+}
+
+function isBoundedNumber(value: unknown, min: number, max: number): boolean {
+  return typeof value === 'number' && Number.isFinite(value) && value >= min && value <= max
+}
+
+export function isClip(value: unknown): value is Clip {
+  if (typeof value !== 'object' || value === null) return false
+  const clip = value as Record<string, unknown>
+  const anchored = clip.strand !== undefined || clip.step !== undefined
+  return CLIP_KINDS.some((kind) => kind === clip.kind) && isBoundedNumber(clip.x, 0, STAGE.width) && isBoundedNumber(clip.y, 0, STAGE.height)
+    && (!anchored || (Number.isInteger(clip.strand) && isBoundedNumber(clip.strand, 0, STRAND_COUNT - 1) && Number.isInteger(clip.step) && isBoundedNumber(clip.step, 0, HAIR_POINTS)))
+}
+
+function sameClips(a: readonly Clip[], b: readonly Clip[]): boolean {
+  return a.length === b.length && a.every((clip, index) => JSON.stringify(clip) === JSON.stringify(b[index]))
 }
 
 function isPlainShape(shape: unknown): boolean {
@@ -203,11 +290,11 @@ export function applyHairAir(look: Look, edits: HairAirEdit[]): Look {
     if (!edit || isBald(strand.length)) return strand
     const wetness = edit.wetness === undefined ? undefined : Math.max(0, Math.min(1, edit.wetness))
     const wetnessChanged = wetness !== undefined && wetness !== (strand.wetness ?? 0)
-    const rinsed = edit.rinse === true && (strand.soapy === true || strand.curl > 0 || strand.color !== natural)
+    const rinsed = edit.rinse === true && (strand.soapy === true || strand.curl > 0 || isDyed(strand, natural))
     const shape = edit.shape === undefined ? strand.shape : normalizeShape(edit.shape)
     if (!wetnessChanged && !rinsed && shape === strand.shape) return strand
     changed = true
-    const clean = rinsed ? { ...strand, color: natural, curl: 0, soapy: false } : strand
+    const clean = rinsed ? rinse(strand, natural) : strand
     return withShape(wetnessChanged ? { ...clean, wetness } : clean, shape)
   })
   return changed ? { ...look, hair } : look
@@ -223,9 +310,14 @@ export function salonReducer(state: SalonState, action: SalonAction): SalonState
   if (action.type === 'reset') {
     return { ...state, looks: { ...state.looks, [state.active]: createLook(state.active) }, history: remember(state) }
   }
-  if (action.type === 'accessory') {
-    if (action.accessory === current.accessory) return state
-    return { ...state, looks: { ...state.looks, [state.active]: { ...current, accessory: action.accessory } }, history: remember(state) }
+  if (action.type === 'wear') {
+    const items: readonly string[] = WEARABLES[action.slot] ?? []
+    if (!items.includes(action.item) || current[action.slot] === action.item) return state
+    return { ...state, looks: { ...state.looks, [state.active]: { ...current, [action.slot]: action.item } }, history: remember(state) }
+  }
+  if (action.type === 'clips') {
+    if (action.clips.length > MAX_CLIPS || !action.clips.every(isClip) || sameClips(action.clips, current.clips)) return state
+    return { ...state, looks: { ...state.looks, [state.active]: { ...current, clips: action.clips.map((clip) => ({ ...clip })) } }, history: remember(state) }
   }
   if (action.type === 'outfit') {
     if (action.outfit === current.outfit || !OUTFITS.includes(action.outfit)) return state
@@ -271,9 +363,9 @@ export function salonReducer(state: SalonState, action: SalonAction): SalonState
       case 'curl': return { ...strand, curl: Math.min(1, strand.curl + CURL_PER_PRESS) }
       case 'brush':
       case 'comb': return { ...strand, curl: 0, flow: Math.max(-1, Math.min(1, action.direction)) }
-      case 'color': return { ...strand, color: action.color }
+      case 'color': return dyeStrand(strand, action.color, action.dye)
       case 'soap': return { ...strand, soapy: true, wetness: 1 }
-      case 'wash': return { ...strand, color: CHARACTERS.find((friend) => friend.id === state.active)!.hair, curl: 0, soapy: false, wetness: 1 }
+      case 'wash': return { ...rinse(strand, CHARACTERS.find((friend) => friend.id === state.active)!.hair), wetness: 1 }
       case 'blower': return { ...strand, wetness: 0, bendY: Math.max(HAIR_BEND_LIMITS.minY, (strand.bendY ?? 0) - 18) }
     }
   })

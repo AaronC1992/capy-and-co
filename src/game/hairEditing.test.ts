@@ -200,7 +200,8 @@ describe('hold-to-grow', () => {
     expect(isBald(sprouting.hair[5].length)).toBe(false)
     expect(sprouting.hair[5].length).toBeCloseTo(MIN_LENGTH + GROWTH_PER_SECOND * 0.2, 6)
     expect(sprouting.hair[5].color).toBe(bald.hair[5].color)
-    const regrown = hold(growth, sprouting, 200, 3000)
+    // From bare scalp to full length in under two seconds of holding.
+    const regrown = hold(growth, sprouting, 200, 1900)
     expect(regrown.hair[5].length).toBe(1)
     expect(growth.canGrow(regrown)).toBe(false)
     expect(regrown.hair[0]).toBe(bald.hair[0])

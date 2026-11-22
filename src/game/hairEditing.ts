@@ -77,8 +77,8 @@ export function cutHairStroke(look: Look, from: Point, to: Point): HairLengthEdi
   })
 }
 
-// How fast held hair grows, as a share of its full length every second: a few seconds for a bald scalp to grow back.
-export const GROWTH_PER_SECOND = 0.5
+// How fast held hair grows, as a share of its full length every second: under two seconds for a bald scalp to grow back.
+export const GROWTH_PER_SECOND = 0.65
 
 export class HairGrowth {
   private last: Point

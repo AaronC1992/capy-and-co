@@ -1,4 +1,5 @@
 import type { Strand } from './model'
+import { rootColor } from './dye'
 import { HAIR_GROUP_COUNT, isSideStrand, smoothstep, STRAND_COUNT, STRANDS_PER_GROUP, strandReach } from './hairLayout'
 
 export interface Pt { x: number; y: number }
@@ -69,6 +70,13 @@ export const SCALP_CAP_POINTS: readonly Pt[] = [...scaledHeadTop(1.04), ...scale
 export const SCALP_CAP_PATH = `M${pointList(SCALP_CAP_POINTS)}Z`
 // Faint flowing lines across the band so it reads as hair rather than a flat helmet.
 export const SCALP_SHEEN_PATHS: readonly string[] = [0.8, 0.9, 0.97].map((scale) => `M${pointList(scaledHeadTop(scale))}`)
+// A headband goes over the roots of the hair, along the top of the head.
+const HEADBAND_SCALE = 0.9
+export const HEADBAND_PATH = `M${pointList(scaledHeadTop(HEADBAND_SCALE))}`
+
+export function headbandY(x: number): number {
+  return CAP_CENTER.y + (headTopY(CAP_CENTER.x + (x - CAP_CENTER.x) / HEADBAND_SCALE) - CAP_CENTER.y) * HEADBAND_SCALE
+}
 
 // Hair shorter than BARE_REACH (in SVG units) leaves the scalp showing; from COVERED_REACH up it hides the head completely.
 const BARE_REACH = 6
@@ -88,7 +96,7 @@ export function scalpTints(hair: readonly Strand[]): ScalpTint[] {
     const strands = Array.from({ length: STRANDS_PER_GROUP }, (_, layer) => hair[layer * HAIR_GROUP_COUNT + group])
     return {
       x: TOP_ROOT_X + group * TOP_ROOT_GAP,
-      color: blend(strands.map((strand) => strand.color)),
+      color: blend(strands.map(rootColor)),
       wetness: strands.reduce((sum, strand) => sum + (strand.wetness ?? 0), 0) / strands.length,
       soap: strands.filter((strand) => strand.soapy).length / strands.length,
       cover: strands.reduce((sum, strand, layer) => sum + smoothstep(BARE_REACH, COVERED_REACH, strandReach(strand.length, layer * HAIR_GROUP_COUNT + group)), 0) / strands.length,
