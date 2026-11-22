@@ -4,6 +4,7 @@ import App from '../App'
 import { Capybara } from './Capybara'
 import { mixColor } from '../game/color'
 import { createLook, STRAND_COUNT } from '../game/model'
+import { MIN_LENGTH } from '../game/hairLayout'
 
 afterEach(() => vi.unstubAllGlobals())
 describe('application initialization and artwork', () => {
@@ -77,6 +78,32 @@ describe('application initialization and artwork', () => {
     expect(styled).not.toContain('stop-color="#eb9c95"')
     expect(styled).toContain('scalp-wet')
     expect((styled.match(/data-soap-scalp=/g) ?? []).length).toBe(11)
+  })
+  it('draws curly hair as a longer, winding stroke than straight hair, with no extra strokes to paint', () => {
+    const look = createLook('mochi')
+    const strand = (html: string) => /<g data-strand="1"[^>]*>(.*?)<\/g>/.exec(html)![1]
+    const segments = (html: string) => (/ d="([^"]*)"/.exec(html)![1].match(/L/g) ?? []).length
+    const straight = strand(renderToStaticMarkup(<Capybara look={look} />))
+    look.hair[1] = { ...look.hair[1], curl: 1 }
+    const curly = strand(renderToStaticMarkup(<Capybara look={look} />))
+    expect(segments(curly)).toBeGreaterThanOrEqual(segments(straight) * 2)
+    expect(curly.match(/<path/g)).toHaveLength(straight.match(/<path/g)!.length)
+  })
+  it('draws a shaved lock as nothing and lets the head show only where the hair has been cut away', () => {
+    const look = createLook('mochi')
+    const full = renderToStaticMarkup(<Capybara look={look} />)
+    expect(full).not.toContain('<mask')
+    look.hair[4] = { length: MIN_LENGTH, color: look.hair[4].color, curl: 0, flow: 0.3 }
+    const patchy = renderToStaticMarkup(<Capybara look={look} />)
+    expect(patchy).not.toContain('data-strand="4"')
+    expect((patchy.match(/data-strand=/g) ?? []).length).toBe(STRAND_COUNT - 1)
+    expect(patchy).toContain('<mask')
+    look.hair = look.hair.map((strand) => ({ length: MIN_LENGTH, color: strand.color, curl: 0, flow: strand.flow }))
+    for (const portrait of [false, true]) {
+      const shaved = renderToStaticMarkup(<Capybara look={look} portrait={portrait} />)
+      expect(shaved).not.toContain('data-strand=')
+      expect(shaved).toContain('data-testid="scalp-cap"')
+    }
   })
   it('draws the dryer stream only while it is blowing, turned to face the way it blows', () => {
     const look = createLook('mochi')

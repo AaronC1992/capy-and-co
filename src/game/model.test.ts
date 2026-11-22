@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { createLooks, HAIR_GROUP_COUNT, salonReducer, STRAND_COUNT } from './model'
 import type { SalonAction, SalonState, Tool } from './model'
 import { hitHair, hitHairStroke, strandPoints } from './hair'
+import { isBald, MIN_LENGTH } from './hairLayout'
 
 const initial = (): SalonState => ({ active: 'mochi', looks: createLooks(), history: [] })
 const style = (tool: Tool, strands = [3], checkpoint = true): SalonAction => ({
@@ -20,6 +21,8 @@ describe('salon gameplay', () => {
   })
   it('groups continuous drying and blowing into one undo and preserves foam, curls, color, length and the blown pose', () => {
     const state = salonReducer(salonReducer(initial(), style('soap', [5])), style('curl', [5]))
+    const curliness = state.looks.mochi.hair[5].curl
+    expect(curliness).toBeGreaterThan(0)
     const blown = Array.from({ length: 48 }, (_, slot) => (slot % 2 === 0 ? 30 : -12) * ((slot >> 1) + 1) / 24)
     let next = state
     for (let frame = 1; frame <= 60; frame++) {
@@ -27,7 +30,7 @@ describe('salon gameplay', () => {
     }
     next = salonReducer(next, { type: 'air', edits: [{ index: 5, shape: blown }], checkpoint: false })
     expect(next.history).toHaveLength(state.history.length + 1)
-    expect(next.looks.mochi.hair[5]).toMatchObject({ soapy: true, curl: true, wetness: 0, shape: blown, length: state.looks.mochi.hair[5].length, color: state.looks.mochi.hair[5].color })
+    expect(next.looks.mochi.hair[5]).toMatchObject({ soapy: true, curl: curliness, wetness: 0, shape: blown, length: state.looks.mochi.hair[5].length, color: state.looks.mochi.hair[5].color })
     expect(salonReducer(next, { type: 'undo' }).looks).toEqual(state.looks)
     const washed = salonReducer(next, style('wash', [5]))
     expect(washed.looks.mochi.hair[5]).toMatchObject({ wetness: 1, soapy: false, shape: blown })
@@ -53,11 +56,12 @@ describe('salon gameplay', () => {
   it('rinses soap, dye and curls out of just the strands the sprayer names, keeping their length and pose', () => {
     const natural = initial().looks.mochi.hair[5].color
     const dirty = salonReducer(salonReducer(salonReducer(initial(), style('soap', [5, 6])), style('curl', [5, 6])), style('color', [5, 6]))
-    expect(dirty.looks.mochi.hair[5]).toMatchObject({ soapy: true, curl: true, color: '#abcdef' })
+    expect(dirty.looks.mochi.hair[5]).toMatchObject({ soapy: true, color: '#abcdef' })
+    expect(dirty.looks.mochi.hair[5].curl).toBeGreaterThan(0)
     const blown = Array.from({ length: 48 }, (_, slot) => (slot % 2 === 0 ? 20 : -8))
     const posed = salonReducer(dirty, { type: 'air', edits: [{ index: 5, shape: blown }], checkpoint: true })
     const rinsed = salonReducer(posed, { type: 'air', edits: [{ index: 5, rinse: true, wetness: 0.3 }], checkpoint: true })
-    expect(rinsed.looks.mochi.hair[5]).toMatchObject({ soapy: false, curl: false, color: natural, wetness: 0.3, shape: blown, length: dirty.looks.mochi.hair[5].length })
+    expect(rinsed.looks.mochi.hair[5]).toMatchObject({ soapy: false, curl: 0, color: natural, wetness: 0.3, shape: blown, length: dirty.looks.mochi.hair[5].length })
     expect(rinsed.looks.mochi.hair[6]).toBe(dirty.looks.mochi.hair[6])
     expect(salonReducer(rinsed, { type: 'undo' }).looks).toEqual(posed.looks)
     expect(salonReducer(rinsed, { type: 'air', edits: [{ index: 5, rinse: true }], checkpoint: true })).toBe(rinsed)
@@ -81,15 +85,15 @@ describe('salon gameplay', () => {
   })
   it('brushes away curls in the swipe direction', () => {
     const curled = salonReducer(initial(), style('curl'))
-    expect(curled.looks.mochi.hair[3].curl).toBe(true)
+    expect(curled.looks.mochi.hair[3].curl).toBeGreaterThan(0)
     const brushed = salonReducer(curled, style('brush'))
-    expect(brushed.looks.mochi.hair[3]).toMatchObject({ curl: false, flow: -1 })
+    expect(brushed.looks.mochi.hair[3]).toMatchObject({ curl: 0, flow: -1 })
   })
   it('combs the whole head smooth the same way, keeping length, color and the saved shape', () => {
     const shape = Array.from({ length: 48 }, (_, slot) => (slot % 2 === 0 ? 12 : -4))
     const posed = salonReducer(salonReducer(initial(), { type: 'pose', locks: [{ index: 3, flow: 0.3, shape }], checkpoint: true }), style('curl'))
     const combed = salonReducer(posed, style('comb'))
-    expect(combed.looks.mochi.hair[3]).toMatchObject({ curl: false, flow: -1, shape, length: posed.looks.mochi.hair[3].length, color: posed.looks.mochi.hair[3].color })
+    expect(combed.looks.mochi.hair[3]).toMatchObject({ curl: 0, flow: -1, shape, length: posed.looks.mochi.hair[3].length, color: posed.looks.mochi.hair[3].color })
     expect(combed.history).toHaveLength(posed.history.length + 1)
   })
   it('saves independently posed locks as one undoable drag without altering hair lengths', () => {
@@ -98,7 +102,7 @@ describe('salon gameplay', () => {
     const continued = salonReducer(started, { type: 'pose', locks: [{ index: 4, flow: 0.3 }], checkpoint: false })
     const finished = salonReducer(continued, { type: 'pose', locks: [{ index: 3, flow: -1 }, { index: 4, flow: 0.8 }], checkpoint: false })
     expect(finished.history).toHaveLength(state.history.length + 1)
-    expect(finished.looks.mochi.hair[3]).toMatchObject({ flow: -1, curl: false, length: state.looks.mochi.hair[3].length })
+    expect(finished.looks.mochi.hair[3]).toMatchObject({ flow: -1, curl: 0, length: state.looks.mochi.hair[3].length })
     expect(finished.looks.mochi.hair[4].flow).toBe(0.8)
     expect(salonReducer(finished, { type: 'undo' }).looks).toEqual(state.looks)
   })
@@ -202,7 +206,7 @@ describe('salon gameplay', () => {
     const state = initial()
     expect(salonReducer(state, { type: 'lengths', edits: [{ index: 5, length: state.looks.mochi.hair[5].length }], checkpoint: true })).toBe(state)
     const bounded = salonReducer(state, { type: 'lengths', edits: [{ index: 4, length: -5 }, { index: 5, length: 6 }], checkpoint: true })
-    expect(bounded.looks.mochi.hair[4].length).toBe(0.08)
+    expect(bounded.looks.mochi.hair[4].length).toBe(MIN_LENGTH)
     expect(bounded.looks.mochi.hair[5].length).toBe(1)
   })
   it('keeps looks separate when switching friends and clears cross-friend undo', () => {
@@ -230,7 +234,108 @@ describe('salon gameplay', () => {
   })
   it('applies whole-head styling to every lock', () => {
     const result = salonReducer(initial(), style('curl', Array.from({ length: STRAND_COUNT }, (_, i) => i)))
-    expect(result.looks.mochi.hair.every((strand) => strand.curl)).toBe(true)
+    expect(result.looks.mochi.hair.every((strand) => strand.curl > 0)).toBe(true)
+  })
+  it('curls the whole head more with each press until it is fully curly', () => {
+    const everyStrand = Array.from({ length: STRAND_COUNT }, (_, i) => i)
+    const levels: number[] = []
+    let state = initial()
+    for (let press = 0; press < 5; press++) {
+      state = salonReducer(state, style('curl', everyStrand))
+      levels.push(state.looks.mochi.hair[3].curl)
+    }
+    levels.slice(1).forEach((level, i) => expect(level).toBeGreaterThanOrEqual(levels[i]))
+    expect(levels[0]).toBeGreaterThan(0)
+    expect(levels[0]).toBeLessThan(1)
+    expect(levels.at(-1)).toBe(1)
+  })
+})
+
+describe('hold-to-curl', () => {
+  it('turns one continuous hold into a single undo, curling only the named strands up to fully curly', () => {
+    const state = initial()
+    let next = state
+    for (let frame = 0; frame < 40; frame++) {
+      next = salonReducer(next, { type: 'curl', edits: [{ index: 5, curl: (frame + 1) / 20 }, { index: 6, curl: 0.5 }], checkpoint: frame === 0 })
+    }
+    expect(next.history).toHaveLength(1)
+    expect(next.looks.mochi.hair[5].curl).toBe(1)
+    expect(next.looks.mochi.hair[6].curl).toBe(0.5)
+    expect(next.looks.mochi.hair[4]).toBe(state.looks.mochi.hair[4])
+    expect(salonReducer(next, { type: 'undo' }).looks).toEqual(state.looks)
+  })
+  it('keeps the hair, color and pose it curls, and can curl it back out', () => {
+    const shape = Array.from({ length: 48 }, (_, slot) => (slot % 2 === 0 ? 12 : -4))
+    const posed = salonReducer(salonReducer(initial(), { type: 'pose', locks: [{ index: 5, flow: 0.3, shape }], checkpoint: true }), style('color', [5]))
+    const curled = salonReducer(posed, { type: 'curl', edits: [{ index: 5, curl: 0.7 }], checkpoint: true })
+    expect(curled.looks.mochi.hair[5]).toMatchObject({ curl: 0.7, shape, color: '#abcdef', length: posed.looks.mochi.hair[5].length })
+    expect(salonReducer(curled, { type: 'curl', edits: [{ index: 5, curl: 0 }], checkpoint: true }).looks.mochi.hair[5].curl).toBe(0)
+  })
+  it('ignores curls that change nothing, and bad or out-of-range edits', () => {
+    const state = initial()
+    expect(salonReducer(state, { type: 'curl', edits: [{ index: 5, curl: 0 }], checkpoint: true })).toBe(state)
+    expect(salonReducer(state, { type: 'curl', edits: [{ index: -1, curl: 1 }, { index: STRAND_COUNT, curl: 1 }, { index: 1.5, curl: 1 }, { index: 5, curl: Number.NaN }], checkpoint: true })).toBe(state)
+    expect(salonReducer(state, { type: 'curl', edits: [{ index: 5, curl: 9 }], checkpoint: true }).looks.mochi.hair[5].curl).toBe(1)
+    expect(salonReducer(state, { type: 'curl', edits: [{ index: 5, curl: -3 }], checkpoint: true })).toBe(state)
+  })
+})
+
+describe('cutting hair right down to the scalp', () => {
+  const shave = (state: SalonState, index: number) => salonReducer(state, { type: 'lengths', edits: [{ index, length: MIN_LENGTH }], checkpoint: true })
+  const prepared = () => {
+    const shape = Array.from({ length: 48 }, (_, slot) => (slot % 2 === 0 ? 12 : -4))
+    let state = salonReducer(initial(), { type: 'pose', locks: [{ index: 5, flow: -0.4, bendX: 30, bendY: 10, shape }], checkpoint: true })
+    state = salonReducer(state, style('color', [5]))
+    state = salonReducer(state, style('soap', [5]))
+    return salonReducer(state, { type: 'curl', edits: [{ index: 5, curl: 0.6 }], checkpoint: true })
+  }
+
+  it('shaves a strand bald, dropping its pose, soap, water and curls but keeping its color and one undo', () => {
+    const state = prepared()
+    const bald = shave(state, 5)
+    const strand = bald.looks.mochi.hair[5]
+    expect(isBald(strand.length)).toBe(true)
+    expect(strand).toEqual({ length: MIN_LENGTH, color: '#abcdef', curl: 0, flow: -0.4 })
+    expect(bald.looks.mochi.hair[4]).toBe(state.looks.mochi.hair[4])
+    expect(salonReducer(bald, { type: 'undo' }).looks).toEqual(state.looks)
+  })
+  it('does nothing when the strand is already bare', () => {
+    const bald = shave(initial(), 5)
+    expect(shave(bald, 5)).toBe(bald)
+  })
+  it('leaves bare scalp alone whatever else is tried, because there is no hair to style', () => {
+    const bald = shave(prepared(), 5)
+    for (const tool of ['brush', 'comb', 'snip', 'curl', 'soap', 'wash', 'blower', 'color'] as const) {
+      expect(salonReducer(bald, style(tool, [5]))).toBe(bald)
+    }
+    const blown = Array.from({ length: 48 }, (_, slot) => (slot % 2 === 0 ? 20 : -8))
+    expect(salonReducer(bald, { type: 'pose', locks: [{ index: 5, flow: 0.5, shape: blown }], checkpoint: true })).toBe(bald)
+    expect(salonReducer(bald, { type: 'air', edits: [{ index: 5, wetness: 1, shape: blown, rinse: true }], checkpoint: true })).toBe(bald)
+    expect(salonReducer(bald, { type: 'curl', edits: [{ index: 5, curl: 1 }], checkpoint: true })).toBe(bald)
+  })
+  it('still styles the rest of the head when a whole-head tool also reaches shaved scalp', () => {
+    const bald = shave(prepared(), 5)
+    const everyStrand = Array.from({ length: STRAND_COUNT }, (_, i) => i)
+    const painted = salonReducer(bald, style('color', everyStrand))
+    expect(painted.looks.mochi.hair[5]).toBe(bald.looks.mochi.hair[5])
+    expect(painted.looks.mochi.hair[4].color).toBe('#abcdef')
+  })
+  it('lets Grow bring shaved hair back in its own color, with nothing left of the old style', () => {
+    const bald = shave(prepared(), 5)
+    const wholeHead = salonReducer(bald, style('grow', [5]))
+    expect(isBald(wholeHead.looks.mochi.hair[5].length)).toBe(false)
+    expect(wholeHead.looks.mochi.hair[5]).toMatchObject({ color: '#abcdef', curl: 0, flow: -0.4 })
+    expect(wholeHead.looks.mochi.hair[5].shape).toBeUndefined()
+    let regrown = bald
+    for (let frame = 0; frame < 30; frame++) regrown = salonReducer(regrown, { type: 'lengths', edits: [{ index: 5, length: MIN_LENGTH + (frame + 1) * 0.03 }], checkpoint: frame === 0 })
+    expect(regrown.looks.mochi.hair[5].length).toBeGreaterThan(0.6)
+    expect(regrown.history).toHaveLength(bald.history.length + 1)
+  })
+  it('only shaves hair that is cut right to the scalp, leaving shorter hair as stubble', () => {
+    const state = initial()
+    const stubble = salonReducer(state, { type: 'lengths', edits: [{ index: 5, length: 0 }], checkpoint: true })
+    expect(isBald(stubble.looks.mochi.hair[5].length)).toBe(false)
+    expect(stubble.looks.mochi.hair[5].length).toBe(0)
   })
 })
 

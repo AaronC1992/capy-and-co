@@ -1,6 +1,6 @@
-import { closestPointOnStroke, hitHair, hitHairStroke, isSideStrand, lengthScale, MIN_REACH, strandPoints } from './hair'
+import { closestPointOnStroke, isSideStrand, lengthScale, strandPoints, touchStrands } from './hair'
 import type { Point } from './hair'
-import { HAIR_POINTS, truncateShape } from './hairLayout'
+import { BALD_REACH, HAIR_POINTS, isBald, MIN_LENGTH, MIN_REACH, strandReach, truncateShape } from './hairLayout'
 import type { HairLengthEdit, Look, Strand } from './model'
 
 // The fraction along the strand where its height matches the cut. Hair that has been brushed into
@@ -30,6 +30,7 @@ function shapedCutFraction(strand: Strand, reach: number, direction: number, hei
 
 export function cutHairStroke(look: Look, from: Point, to: Point): HairLengthEdit[] {
   return look.hair.flatMap((strand, index) => {
+    if (isBald(strand.length)) return []
     const points = strandPoints(strand, index)
     let distance = 16
     let contact: Point | null = null
@@ -44,7 +45,7 @@ export function cutHairStroke(look: Look, from: Point, to: Point): HairLengthEdi
       }
     }
     if (!contact) return []
-    const reach = MIN_REACH + strand.length * lengthScale(index)
+    const reach = strandReach(strand.length, index)
     const direction = isSideStrand(index) ? 1 : -1
     const height = contact.y - points[0].y
     const bendY = strand.bendY ?? 0
@@ -60,9 +61,12 @@ export function cutHairStroke(look: Look, from: Point, to: Point): HairLengthEdi
       ].filter((t) => t >= -1e-9 && t <= 1 + 1e-9).map((t) => Math.max(0, Math.min(1, t)))
       fraction = roots.length ? roots.reduce((best, t) => Math.abs(t - nearestT) < Math.abs(best - nearestT) ? t : best) : nearestT
     }
-    const length = Math.max(0.08, Math.min(strand.length, (reach * fraction - MIN_REACH) / lengthScale(index)))
+    const length = Math.max(MIN_LENGTH, Math.min(strand.length, (reach * fraction - MIN_REACH) / lengthScale(index)))
     if (strand.length - length <= 0.000001) return []
-    const kept = (MIN_REACH + length * lengthScale(index)) / reach
+    const keptReach = strandReach(length, index)
+    // A cut down at the scalp takes the whole strand, so shaving the head is easy to do.
+    if (keptReach < BALD_REACH) return [{ index, length: MIN_LENGTH }]
+    const kept = keptReach / reach
     const retained = kept ** 2
     return [{
       index, length,
@@ -73,7 +77,8 @@ export function cutHairStroke(look: Look, from: Point, to: Point): HairLengthEdi
   })
 }
 
-const GROWTH_PER_SECOND = 0.24
+// How fast held hair grows, as a share of its full length every second: a few seconds for a bald scalp to grow back.
+export const GROWTH_PER_SECOND = 0.5
 
 export class HairGrowth {
   private last: Point
@@ -84,7 +89,7 @@ export class HairGrowth {
   constructor(look: Look, point: Point, now: number) {
     this.last = point
     this.lastTime = now
-    this.targets = hitHair(look, point)
+    this.targets = touchStrands(look, point, point)
   }
 
   private advance(look: Look, targets: number[], now: number): HairLengthEdit[] {
@@ -98,11 +103,12 @@ export class HairGrowth {
     })
   }
 
+  // Growing reaches shaved scalp as well as hair, so a cut-bald head can always grow back.
   move(look: Look, point: Point, now: number): HairLengthEdit[] {
     if (point.x === this.last.x && point.y === this.last.y) return this.hold(look, now)
-    const edits = this.advance(look, hitHairStroke(look, this.last, point), now)
+    const edits = this.advance(look, touchStrands(look, this.last, point), now)
     // Retain only this area's locks for holding, not every lock crossed earlier.
-    this.targets = hitHair(look, point)
+    this.targets = touchStrands(look, point, point)
     this.last = point
     return edits
   }

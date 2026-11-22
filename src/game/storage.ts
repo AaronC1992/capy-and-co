@@ -1,13 +1,22 @@
 import { ACCESSORIES, CHARACTERS, createLooks, HAIR_BEND_LIMITS, HAIR_GROUP_COUNT, STRAND_COUNT } from './model'
-import { isHairShape } from './hairLayout'
-import type { CharacterId, Look, Looks } from './model'
+import { isHairShape, MIN_LENGTH } from './hairLayout'
+import type { CharacterId, Look, Looks, Strand } from './model'
 
 export const STORAGE_KEY = 'capy-and-co:v1'
 export const MAX_PHOTOS = 12
 export interface Photo { id: string; look: Look; createdAt: string }
 export interface SavedGame { version: 2; active: CharacterId; looks: Looks; photos: Photo[]; sound: boolean }
-type StoredGame = Omit<SavedGame, 'version'> & { version: 1 | 2 }
+// Saves made when curls were simply on or off hold a yes or no instead of how curly the hair is.
+type StoredStrand = Omit<Strand, 'curl'> & { curl: number | boolean }
+type StoredLook = Omit<Look, 'hair'> & { hair: StoredStrand[] }
+type StoredGame = Omit<SavedGame, 'version' | 'looks' | 'photos'> & {
+  version: 1 | 2
+  looks: Record<CharacterId, StoredLook>
+  photos: (Omit<Photo, 'look'> & { look: StoredLook })[]
+}
 export interface StoragePort { getItem(key: string): string | null; setItem(key: string, value: string): void }
+// How curly hair that was saved as "curly" comes back: noticeably wavy, with room to curl tighter.
+const LEGACY_CURL = 0.4
 
 export function freshSave(): SavedGame {
   return { version: 2, active: 'mochi', looks: createLooks(), photos: [], sound: false }
@@ -25,13 +34,13 @@ function isOptionalBoundedNumber(value: unknown, min: number, max: number): bool
   return value === undefined || (typeof value === 'number' && Number.isFinite(value) && value >= min && value <= max)
 }
 
-export function isLook(value: unknown, legacy = false): value is Look {
+export function isLook(value: unknown, legacy = false): value is StoredLook {
   if (!isRecord(value) || !isCharacter(value.character) || !ACCESSORIES.some((a) => a === value.accessory)) return false
   return Array.isArray(value.hair) && (value.hair.length === STRAND_COUNT || (legacy && value.hair.length === HAIR_GROUP_COUNT)) && value.hair.every((strand: unknown) =>
     isRecord(strand)
-    && typeof strand.length === 'number' && Number.isFinite(strand.length) && strand.length >= 0.08 && strand.length <= 1
+    && typeof strand.length === 'number' && Number.isFinite(strand.length) && strand.length >= MIN_LENGTH && strand.length <= 1
     && typeof strand.color === 'string' && /^#[0-9a-f]{6}$/i.test(strand.color)
-    && typeof strand.curl === 'boolean'
+    && (typeof strand.curl === 'boolean' || (typeof strand.curl === 'number' && Number.isFinite(strand.curl) && strand.curl >= 0 && strand.curl <= 1))
     && typeof strand.flow === 'number' && Number.isFinite(strand.flow) && strand.flow >= -1 && strand.flow <= 1
     && isOptionalBoundedNumber(strand.bendX, HAIR_BEND_LIMITS.minX, HAIR_BEND_LIMITS.maxX)
     && isOptionalBoundedNumber(strand.bendY, HAIR_BEND_LIMITS.minY, HAIR_BEND_LIMITS.maxY)
@@ -56,9 +65,16 @@ function isSave(value: unknown): value is StoredGame {
   })
 }
 
-function expandHair(look: Look): Look {
-  if (look.hair.length === STRAND_COUNT) return look
-  return { ...look, hair: Array.from({ length: STRAND_COUNT }, (_, index) => ({ ...look.hair[index % HAIR_GROUP_COUNT] })) }
+function readCurl(curl: number | boolean): number {
+  if (typeof curl === 'number') return curl
+  return curl ? LEGACY_CURL : 0
+}
+
+function readLook(look: StoredLook): Look {
+  const hair = look.hair.length === STRAND_COUNT
+    ? look.hair
+    : Array.from({ length: STRAND_COUNT }, (_, index) => look.hair[index % HAIR_GROUP_COUNT])
+  return { ...look, hair: hair.map((strand) => ({ ...strand, curl: readCurl(strand.curl) })) }
 }
 
 export function loadGame(storage: StoragePort): { data: SavedGame; error: string | null } {
@@ -69,8 +85,8 @@ export function loadGame(storage: StoragePort): { data: SavedGame; error: string
     if (!isSave(parsed)) throw new Error('The saved salon data has an invalid format.')
     return { data: {
       ...parsed, version: 2,
-      looks: { mochi: expandHair(parsed.looks.mochi), biscuit: expandHair(parsed.looks.biscuit), cocoa: expandHair(parsed.looks.cocoa) },
-      photos: parsed.photos.map((photo) => ({ ...photo, look: expandHair(photo.look) })),
+      looks: { mochi: readLook(parsed.looks.mochi), biscuit: readLook(parsed.looks.biscuit), cocoa: readLook(parsed.looks.cocoa) },
+      photos: parsed.photos.map((photo) => ({ ...photo, look: readLook(photo.look) })),
     }, error: null }
   } catch (error) {
     console.warn('Could not load the local salon:', error)

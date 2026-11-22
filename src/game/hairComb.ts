@@ -1,6 +1,6 @@
 import { closestPointOnStroke, strandPoints } from './hair'
 import type { HairOffsets, Point } from './hair'
-import { HAIR_POINTS, HAIR_SHAPE_LENGTH, HAIR_SHAPE_LIMIT } from './hairLayout'
+import { HAIR_POINTS, HAIR_SHAPE_LENGTH, HAIR_SHAPE_LIMIT, isBald } from './hairLayout'
 import type { HairShape, StrandPose } from './hairLayout'
 import { wrapAngle } from './hairWind'
 import type { Look, Strand } from './model'
@@ -87,9 +87,9 @@ interface Grip {
 }
 
 function takeHold(saved: Strand, index: number, shown: HairShape | undefined, from: Point, to: Point, travelled: number): Grip | undefined {
-  // Combing smooths curls out, so hold the straightened hair that will be saved.
-  const style = saved.curl ? { ...saved, curl: false } : saved
-  const points = strandPoints(style, index, shown)
+  // Shaved scalp has no hair to hold.
+  if (isBald(saved.length)) return undefined
+  const points = strandPoints(saved, index, shown)
   let nearest = Infinity
   let touched = 0
   let along = 0
@@ -105,7 +105,7 @@ function takeHold(saved: Strand, index: number, shown: HairShape | undefined, fr
   if (nearest > COMB_RADIUS) return undefined
   // Always leave at least one segment to lay down, even when the tip is what was touched.
   const anchor = Math.min(touched, HAIR_POINTS - 1)
-  const natural = strandPoints({ ...style, shape: undefined }, index)
+  const natural = strandPoints({ ...saved, shape: undefined }, index)
   const lengths: number[] = []
   for (let step = anchor + 1; step <= HAIR_POINTS; step++) {
     lengths.push(Math.hypot(natural[step].x - natural[step - 1].x, natural[step].y - natural[step - 1].y))
@@ -117,7 +117,7 @@ function takeHold(saved: Strand, index: number, shown: HairShape | undefined, fr
     entry: Math.atan2(points[anchor].y - before.y, points[anchor].x - before.x),
     lengths,
     turns: lengths.map((length) => 1 - Math.exp(-length / GEL_TURN)),
-    rest: strandPoints(style, index),
+    rest: strandPoints(saved, index),
     frozen: Array.from({ length: anchor * 2 }, (_, slot) => shown?.[slot] ?? 0),
     start: travelled + along,
   }

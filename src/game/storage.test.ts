@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { addPhoto, freshSave, isLook, loadGame, MAX_PHOTOS, saveGame, STORAGE_KEY } from './storage'
 import type { StoragePort } from './storage'
 import { createLook, HAIR_GROUP_COUNT, STRAND_COUNT } from './model'
+import { MIN_LENGTH } from './hairLayout'
 
 function memoryStorage(): StoragePort {
   const entries = new Map<string, string>()
@@ -19,7 +20,7 @@ describe('local persistence', () => {
     data.active = 'cocoa'
     data.sound = true
     data.looks.cocoa.accessory = 'crown'
-    data.looks.cocoa.hair[5] = { ...data.looks.cocoa.hair[5], bendX: 70, bendY: -45, soapy: true, wetness: 0.4, shape: Array.from({ length: 48 }, (_, slot) => slot / 3 - 5) }
+    data.looks.cocoa.hair[5] = { ...data.looks.cocoa.hair[5], bendX: 70, bendY: -45, soapy: true, wetness: 0.4, curl: 0.65, shape: Array.from({ length: 48 }, (_, slot) => slot / 3 - 5) }
     data.photos = addPhoto([], data.looks.cocoa, 'photo-1', '2026-01-01T12:00:00Z')
     expect(saveGame(storage, data)).toBeNull()
     expect(loadGame(storage).data).toEqual(data)
@@ -46,9 +47,41 @@ describe('local persistence', () => {
     expect(saveGame(storage, data)).toBeNull()
     expect(loadGame(storage).data).toEqual(data)
   })
+  it.each([
+    { strands: 13, curl: true, expected: 0.4 }, { strands: 13, curl: false, expected: 0 },
+    { strands: 65, curl: true, expected: 0.4 }, { strands: 65, curl: false, expected: 0 },
+  ])('opens saves from when curls were only on or off, as $strands strands with curl $curl', ({ strands, curl, expected }) => {
+    const storage = memoryStorage()
+    const legacy = JSON.parse(JSON.stringify({ ...freshSave(), version: strands === 13 ? 1 : 2 }))
+    for (const look of Object.values<{ hair: { curl: unknown }[] }>(legacy.looks)) {
+      look.hair = look.hair.slice(0, strands)
+      for (const strand of look.hair) strand.curl = curl
+    }
+    const photo = JSON.parse(JSON.stringify(legacy.looks.mochi))
+    legacy.photos = [{ id: 'old', look: photo, createdAt: '2026-01-01T12:00:00Z' }]
+    storage.setItem(STORAGE_KEY, JSON.stringify(legacy))
+    const { data, error } = loadGame(storage)
+    expect(error).toBeNull()
+    expect(data.looks.mochi.hair).toHaveLength(STRAND_COUNT)
+    expect(data.looks.cocoa.hair.every((strand) => strand.curl === expected)).toBe(true)
+    expect(data.photos[0].look.hair.every((strand) => strand.curl === expected)).toBe(true)
+    expect(saveGame(storage, data)).toBeNull()
+    expect(loadGame(storage).data).toEqual(data)
+  })
+  it('keeps hair that was cut right down to the scalp, so a shaved look survives a reload', () => {
+    const storage = memoryStorage()
+    const data = freshSave()
+    data.looks.mochi.hair[5] = { length: MIN_LENGTH, color: '#eb9c95', curl: 0, flow: 0.3 }
+    data.looks.mochi.hair[6] = { ...data.looks.mochi.hair[6], length: -0.1 }
+    data.photos = addPhoto([], data.looks.mochi, 'shaved', '2026-01-01T12:00:00Z')
+    expect(isLook(data.looks.mochi)).toBe(true)
+    expect(saveGame(storage, data)).toBeNull()
+    expect(loadGame(storage)).toEqual({ data, error: null })
+  })
   it('rejects malformed or out-of-bounds poses and lather in both looks and saved pictures', () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {})
     for (const invalid of [{ bendX: 96 }, { bendY: -66 }, { bendY: null }, { bendX: '50' }, { soapy: 'yes' }, { wetness: 2 }, { wetness: -0.1 }, { wetness: 'wet' },
+      { curl: 1.5 }, { curl: -0.2 }, { curl: '0.5' }, { curl: null }, { curl: Number.NaN }, { length: MIN_LENGTH - 0.01 }, { length: 1.01 },
       { shape: [1, 2] }, { shape: null }, { shape: new Array(48).fill(301) }, { shape: new Array(48).fill('1') }, { shape: new Array(48).fill(null) }]) {
       const look = createLook('mochi')
       const corrupted = { ...look, hair: look.hair.map((strand, i) => i === 5 ? { ...strand, ...invalid } : strand) }

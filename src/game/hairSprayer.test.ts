@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { HairSprayer, SPRAY_RADIUS } from './hairSprayer'
 import { strandPoints } from './hair'
 import type { Point } from './hair'
-import { HAIR_POINTS, HAIR_SHAPE_LENGTH } from './hairLayout'
+import { HAIR_POINTS, HAIR_SHAPE_LENGTH, MIN_LENGTH } from './hairLayout'
 import { applyHairAir, CHARACTERS, createLook, STRAND_COUNT } from './model'
 import type { HairAirEdit, Look } from './model'
 
@@ -90,13 +90,24 @@ describe('the water sprayer', () => {
   })
   it('rinses each strand once, washing out soap, dye and curls and nothing outside the mist', () => {
     const dry = createLook('mochi')
-    const dirty: Look = { ...dry, hair: dry.hair.map((strand) => ({ ...strand, color: '#d62f8b', soapy: true, curl: true })) }
+    const dirty: Look = { ...dry, hair: dry.hair.map((strand) => ({ ...strand, color: '#d62f8b', soapy: true, curl: 0.8 })) }
     const { edits, look } = sprayMiddle(0.5, dirty)
     const rinsed = edits.filter((edit) => edit.rinse)
     expect(new Set(rinsed.map(({ index }) => index)).size).toBe(rinsed.length)
     expect(rinsed.map(({ index }) => index)).toContain(STRAND)
-    expect(look.hair[STRAND]).toMatchObject({ color: natural(dry), soapy: false, curl: false })
-    for (const index of FAR) expect(look.hair[index]).toMatchObject({ color: '#d62f8b', soapy: true, curl: true })
+    expect(look.hair[STRAND]).toMatchObject({ color: natural(dry), soapy: false, curl: 0 })
+    for (const index of FAR) expect(look.hair[index]).toMatchObject({ color: '#d62f8b', soapy: true, curl: 0.8 })
+  })
+  it('passes over shaved scalp, which has no hair to wet, soak or rinse', () => {
+    const full = createLook('mochi')
+    const finger = restPoint(full, 12)
+    const shaved: Look = { ...full, hair: full.hair.map((strand, index) => index === STRAND ? { length: MIN_LENGTH, color: strand.color, curl: 0, flow: strand.flow } : strand) }
+    const sprayer = new HairSprayer(shaved, finger, 0)
+    const { edits, look } = hold(sprayer, shaved, 0, 0.5)
+    expect(edits.length).toBeGreaterThan(0)
+    expect(edits.some(({ index }) => index === STRAND)).toBe(false)
+    expect(sprayer.poses().some(({ index }) => index === STRAND)).toBe(false)
+    expect(look.hair[STRAND]).toBe(shaved.hair[STRAND])
   })
   it('hangs every soaked strand from its root with the same length and without changing the root', () => {
     const { base, sprayer } = sprayMiddle(0.5)

@@ -1,7 +1,7 @@
 import { strandPoints } from './hair'
 import type { HairOffsets, Point } from './hair'
 import { bendStrand, brushContact, brushSlip } from './hairBrush'
-import { HAIR_POINTS, HAIR_SHAPE_LENGTH, roundShape, STRAND_COUNT } from './hairLayout'
+import { HAIR_POINTS, HAIR_SHAPE_LENGTH, isBald, roundShape, STRAND_COUNT } from './hairLayout'
 import type { HairShape, StrandPose } from './hairLayout'
 import type { Look } from './model'
 
@@ -96,15 +96,15 @@ export class HairMotion {
 
   // Moves the fingertip from `from` to `to`. Only hair under the fingertip bends, and only the part
   // of each strand around the touch point follows. Returns every strand the fingertip is touching.
-  drag(look: Look, from: Point, to: Point, straighten = false): number[] {
+  drag(look: Look, from: Point, to: Point): number[] {
     const delta = { x: to.x - from.x, y: to.y - from.y }
     const moving = delta.x !== 0 || delta.y !== 0
     const touched: number[] = []
     look.hair.forEach((saved, index) => {
+      // Shaved scalp has no hair to bend.
+      if (isBald(saved.length)) return
       const strand = this.strands[index]
-      // Brushing combs curls out, so bend from the straightened hair that will be saved.
-      const style = straighten && saved.curl ? { ...saved, curl: false } : saved
-      const points = strandPoints(style, index, strand.held ? strand.target : strand.position)
+      const points = strandPoints(saved, index, strand.held ? strand.target : strand.position)
       const contact = brushContact(points, from, to)
       if (!contact) return
       touched.push(index)
@@ -119,8 +119,8 @@ export class HairMotion {
       const carried = { x: strand.target[slot] - strand.origin[slot], y: strand.target[slot + 1] - strand.origin[slot + 1] }
       const weight = contact.weight * brushSlip(carried, delta)
       if (weight <= 0) return
-      const rest = strandPoints(style, index)
-      const natural = strandPoints({ ...style, shape: undefined }, index)
+      const rest = strandPoints(saved, index)
+      const natural = strandPoints({ ...saved, shape: undefined }, index)
       const bent = bendStrand(points, { weight, point: contact.point }, delta, natural)
       strand.target = bent.slice(1).flatMap((point, step) => [point.x - rest[step + 1].x, point.y - rest[step + 1].y])
     })

@@ -1,6 +1,6 @@
 import { strandPoints } from './hair'
 import type { Point } from './hair'
-import { HAIR_CENTER_X, HAIR_POINTS } from './hairLayout'
+import { HAIR_CENTER_X, HAIR_POINTS, isBald } from './hairLayout'
 import type { HairAirEdit, Look } from './model'
 import { bendInWind, windChain, windStrength, WIND_BACK, wrapAngle } from './hairWind'
 import type { AirJet, WindChain, WindPose } from './hairWind'
@@ -70,7 +70,8 @@ export class HairBlower {
       const zeros = () => new Array<number>(HAIR_POINTS).fill(0)
       return {
         chain: windChain(points, points[0].x >= HAIR_CENTER_X ? 1 : -1, index),
-        base: points.slice(1),
+        // Shaved scalp has no hair to blow; with no points for the air to reach, the strand stays out of the wind.
+        base: isBald(strand.length) ? [] : points.slice(1),
         strength: zeros(), amount: zeros(), memory: zeros(), lean: zeros(),
         heading: 0, peak: 0, engaged: false, busy: false,
       }

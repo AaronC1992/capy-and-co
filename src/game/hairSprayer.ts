@@ -1,6 +1,6 @@
 import { strandPoints } from './hair'
 import type { Point } from './hair'
-import { HAIR_POINTS } from './hairLayout'
+import { HAIR_POINTS, isBald } from './hairLayout'
 import type { StrandPose } from './hairLayout'
 import { droopChain, droopOffsets } from './hairDroop'
 import type { DroopChain } from './hairDroop'
@@ -78,11 +78,11 @@ export class HairSprayer {
     this.finger = { x: point.x, y: point.y }
     this.lastTime = now
     this.strands = look.hair.map((strand, index) => {
-      // Water straightens curls, so the hanging pose is measured from the strand as it will look once rinsed.
-      const points = strandPoints(strand.curl ? { ...strand, curl: false } : strand, index)
+      const points = strandPoints(strand, index)
       const zeros = () => new Array<number>(HAIR_POINTS).fill(0)
       return {
-        chain: droopChain(points), base: points.slice(1),
+        // Shaved scalp has no hair to wet; with no points for the mist to reach, the strand stays out of the spray.
+        chain: droopChain(points), base: isBald(strand.length) ? [] : points.slice(1),
         strength: zeros(), seen: zeros(), water: zeros(), lean: zeros(),
         damp: strand.wetness ?? 0, reported: strand.wetness ?? 0, rinsed: false, stale: false, posedAt: now, busy: false, peak: 0,
       }

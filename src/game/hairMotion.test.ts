@@ -3,7 +3,7 @@ import { HairMotion } from './hairMotion'
 import { BRUSH_RADIUS, brushContact } from './hairBrush'
 import { hitHairStroke, strandPoints } from './hair'
 import type { Point } from './hair'
-import { addShape, HAIR_SHAPE_LENGTH } from './hairLayout'
+import { addShape, HAIR_SHAPE_LENGTH, MIN_LENGTH } from './hairLayout'
 import type { StrandPose } from './hairLayout'
 import type { WindPose } from './hairWind'
 import { createLook } from './model'
@@ -16,11 +16,11 @@ function advance(motion: HairMotion, seconds = 0.4, fps = 60) {
 }
 
 // Drags a fingertip in small steps, the way pointer events arrive.
-function sweep(motion: HairMotion, look: Look, from: Point, moves: number, step: Point, straighten = true): Point {
+function sweep(motion: HairMotion, look: Look, from: Point, moves: number, step: Point): Point {
   let finger = from
   for (let i = 0; i < moves; i++) {
     const next = { x: finger.x + step.x, y: finger.y + step.y }
-    motion.drag(look, finger, next, straighten)
+    motion.drag(look, finger, next)
     motion.step(1 / 60)
     finger = next
   }
@@ -64,6 +64,17 @@ describe('local hair brushing', () => {
     look.hair.forEach((_, index) => {
       if (!touched.includes(index)) expect(offsets[index]).toBeUndefined()
     })
+  })
+  it('leaves shaved scalp alone, since there is no hair there to brush', () => {
+    const look = createLook('mochi')
+    look.hair[STRAND] = { length: MIN_LENGTH, color: look.hair[STRAND].color, curl: 0, flow: 0.3 }
+    const motion = new HairMotion()
+    const root = restPoint(look, STRAND, 0)
+    const touched = motion.drag(look, root, { x: root.x + 12, y: root.y })
+    expect(touched.length).toBeGreaterThan(0)
+    expect(touched).not.toContain(STRAND)
+    advance(motion)
+    expect(motion.offsets()[STRAND]).toBeUndefined()
   })
   it('keeps the root fixed and bends gradually toward the touched point', () => {
     const look = createLook('mochi')

@@ -3,9 +3,9 @@ import type { Ref, SVGProps } from 'react'
 import { CHARACTERS } from '../game/model'
 import type { Accessory, Look, Strand } from '../game/model'
 import { mixColor } from '../game/color'
-import { pathThrough, strandPoints } from '../game/hair'
+import { drawStrand, strandPoints } from '../game/hair'
 import type { HairOffsets } from '../game/hair'
-import { HAIR_POINTS } from '../game/hairLayout'
+import { isBald } from '../game/hairLayout'
 import type { HairShape } from '../game/hairLayout'
 import { headTopY, SCALP_CAP_PATH, SCALP_SHEEN_PATHS, scalpTints } from '../game/hairline'
 import { HEAD_PATH } from '../game/headShape'
@@ -45,12 +45,12 @@ const WET_TINT = '#35546a'
 
 // Every strand is its own memoized piece: a frame only redraws the strands whose style or motion changed.
 const SoapStrand = memo(function SoapStrand({ strand, index, offsets }: StrandProps) {
-  const points = strandPoints(strand, index, offsets)
-  const tip = points[HAIR_POINTS]
+  const { line, stride, path } = drawStrand(strand, index, strandPoints(strand, index, offsets))
+  const tip = line[line.length - 1]
   return <g data-soap-strand={index}>
-    <path d={pathThrough(points, Boolean(strand.curl))} fill="none" stroke="#f2fffb" strokeWidth="9" strokeLinecap="round" opacity=".8" />
+    <path d={path} fill="none" stroke="#f2fffb" strokeWidth="9" strokeLinecap="round" opacity=".8" />
     {[4, 10, 16, 22].map((step, bubble) => {
-      const point = points[step]
+      const point = line[step * stride]
       const x = point.x + (bubble % 2 ? 3 : -3)
       const radius = 3.5 + (index + bubble) % 4 * 0.6
       return <g key={step}>
@@ -69,10 +69,9 @@ function SoapFoam({ look, offsets }: { look: Look; offsets?: HairOffsets }) {
 }
 
 const HairStrand = memo(function HairStrand({ strand, index, offsets }: StrandProps) {
-  const points = strandPoints(strand, index, offsets)
-  const path = pathThrough(points, Boolean(strand.curl))
+  const { line, path } = drawStrand(strand, index, strandPoints(strand, index, offsets))
   const wetness = strand.wetness ?? 0
-  const tip = wetness > 0 && index % 4 === 0 ? points[HAIR_POINTS] : null
+  const tip = wetness > 0 && index % 4 === 0 ? line[line.length - 1] : null
   // Wet hair paints no extra strokes: the cool tint is mixed into the color and the gloss strengthens the highlight.
   return <g data-strand={index} data-wetness={wetness}>
     <path d={path} stroke="#6a4b3a" strokeOpacity=".48" strokeWidth="6.4" />
@@ -92,27 +91,37 @@ function ScalpCap({ look, id }: { look: Look; id: string }) {
     </linearGradient>
   const wet = tints.some((tint) => tint.wetness > 0)
   const soapy = tints.filter((tint) => tint.soap >= 0.5)
+  // Where the hair has been cut right down, the band lets the head show through instead of looking like hair.
+  const bare = tints.some((tint) => tint.cover < 1)
   return <g className="scalp-cap" data-testid="scalp-cap" pointerEvents="none" aria-hidden="true">
     <defs>
       {gradient('scalp', (tint) => ({ color: tint.color, opacity: 1 }))}
       {wet && gradient('scalp-wet', (tint) => ({ color: WET_TINT, opacity: tint.wetness * 0.28 }))}
       {soapy.length > 0 && gradient('scalp-soap', (tint) => ({ color: '#f2fffb', opacity: tint.soap * 0.8 }))}
+      {bare && <>
+        {gradient('scalp-cover', (tint) => ({ color: '#fff', opacity: tint.cover }))}
+        <mask id={`${id}-bare`} maskUnits="userSpaceOnUse" x="0" y="0" width="500" height="520">
+          <rect width="500" height="520" fill={`url(#${id}-scalp-cover)`} />
+        </mask>
+      </>}
     </defs>
-    <path d={SCALP_CAP_PATH} fill={`url(#${id}-scalp)`} stroke="#6a4b3a" strokeOpacity=".4" strokeWidth="2.2" strokeLinejoin="round" />
-    {wet && <path d={SCALP_CAP_PATH} fill={`url(#${id}-scalp-wet)`} />}
-    <g fill="none" strokeLinecap="round">
-      {SCALP_SHEEN_PATHS.map((path, index) => <path key={path} d={path} stroke={index === 1 ? '#fff8e9' : '#6a4b3a'} strokeOpacity={index === 1 ? 0.3 : 0.18} strokeWidth={index === 1 ? 1.2 : 1.6} />)}
+    <g mask={bare ? `url(#${id}-bare)` : undefined}>
+      <path d={SCALP_CAP_PATH} fill={`url(#${id}-scalp)`} stroke="#6a4b3a" strokeOpacity=".4" strokeWidth="2.2" strokeLinejoin="round" />
+      {wet && <path d={SCALP_CAP_PATH} fill={`url(#${id}-scalp-wet)`} />}
+      <g fill="none" strokeLinecap="round">
+        {SCALP_SHEEN_PATHS.map((path, index) => <path key={path} d={path} stroke={index === 1 ? '#fff8e9' : '#6a4b3a'} strokeOpacity={index === 1 ? 0.3 : 0.18} strokeWidth={index === 1 ? 1.2 : 1.6} />)}
+      </g>
+      {soapy.length > 0 && <>
+        <path d={SCALP_CAP_PATH} fill={`url(#${id}-scalp-soap)`} />
+        {soapy.map((tint, index) => {
+          const y = headTopY(tint.x) + 9
+          return <g key={tint.x} data-soap-scalp={index}>
+            <circle cx={tint.x} cy={y} r="4.4" fill="#fafffc" fillOpacity=".94" stroke="#b8d9da" strokeWidth=".65" />
+            <circle cx={tint.x + 6} cy={y + 8} r="3" fill="#e4f5f6" fillOpacity=".94" stroke="#b8d9da" strokeWidth=".65" />
+          </g>
+        })}
+      </>}
     </g>
-    {soapy.length > 0 && <>
-      <path d={SCALP_CAP_PATH} fill={`url(#${id}-scalp-soap)`} />
-      {soapy.map((tint, index) => {
-        const y = headTopY(tint.x) + 9
-        return <g key={tint.x} data-soap-scalp={index}>
-          <circle cx={tint.x} cy={y} r="4.4" fill="#fafffc" fillOpacity=".94" stroke="#b8d9da" strokeWidth=".65" />
-          <circle cx={tint.x + 6} cy={y + 8} r="3" fill="#e4f5f6" fillOpacity=".94" stroke="#b8d9da" strokeWidth=".65" />
-        </g>
-      })}
-    </>}
   </g>
 }
 
@@ -153,7 +162,7 @@ export const Capybara = memo(function Capybara({ look, svgRef, happy = false, po
     <ScalpCap look={look} id={id} />
     {/* Mitred joins paint far faster than round ones and look the same on hair this smooth. */}
     <g className="hair" fill="none" strokeLinecap="round" strokeLinejoin="miter">
-      {look.hair.map((strand, index) => <HairStrand key={index} strand={strand} index={index} offsets={hairOffsets?.[index]} />)}
+      {look.hair.map((strand, index) => isBald(strand.length) ? null : <HairStrand key={index} strand={strand} index={index} offsets={hairOffsets?.[index]} />)}
     </g>
     <SoapFoam look={look} offsets={hairOffsets} />
     <Decoration accessory={look.accessory} />

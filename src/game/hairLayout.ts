@@ -2,6 +2,10 @@ export const HAIR_GROUP_COUNT = 13
 export const STRANDS_PER_GROUP = 5
 export const STRAND_COUNT = HAIR_GROUP_COUNT * STRANDS_PER_GROUP
 export const MIN_REACH = 22
+// Hair can be cut shorter than any style grows it. At this length a strand has no hair left and the scalp shows.
+export const MIN_LENGTH = -0.2
+// Cutting this close to the roots (in SVG units) takes the whole strand, so a close shave is easy to reach.
+export const BALD_REACH = 12
 // Horizontal middle of the head; hair on either side leans away from it.
 export const HAIR_CENTER_X = 250
 
@@ -28,7 +32,18 @@ export function lengthScale(index: number): number {
 }
 
 export function strandReach(length: number, index: number): number {
-  return MIN_REACH + length * lengthScale(index)
+  return Math.max(0, MIN_REACH + length * lengthScale(index))
+}
+
+// A shaved strand is drawn as nothing; growing it brings it back.
+export function isBald(length: number): boolean {
+  return length <= MIN_LENGTH
+}
+
+// 0 below `from`, 1 above `to`, and an eased blend between.
+export function smoothstep(from: number, to: number, value: number): number {
+  const t = Math.max(0, Math.min(1, (value - from) / (to - from)))
+  return t * t * (3 - 2 * t)
 }
 
 export function isHairShape(value: unknown): value is HairShape {

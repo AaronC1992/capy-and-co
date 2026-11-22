@@ -9,7 +9,7 @@ const TOOLS: { id: Tool; label: string; note: string; tint: string }[] = [
   { id: 'comb', label: 'Comb', note: 'Gel-smooth control', tint: 'mint' },
   { id: 'snip', label: 'Snip', note: 'A fresh little trim', tint: 'pink' },
   { id: 'grow', label: 'Grow', note: 'Long hair, don’t care', tint: 'rose' },
-  { id: 'curl', label: 'Curl', note: 'A little extra bounce', tint: 'yellow' },
+  { id: 'curl', label: 'Curl', note: 'Hold for bouncy curls', tint: 'yellow' },
   { id: 'soap', label: 'Soap', note: 'Fluffy bubble magic', tint: 'pink' },
   { id: 'wash', label: 'Wash', note: 'Spray it clean', tint: 'blue' },
   { id: 'blower', label: 'Blow-dry', note: 'Whoosh! Hair goes flying', tint: 'blue' },

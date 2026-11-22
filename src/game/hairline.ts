@@ -1,5 +1,5 @@
 import type { Strand } from './model'
-import { HAIR_GROUP_COUNT, isSideStrand, STRAND_COUNT, STRANDS_PER_GROUP } from './hairLayout'
+import { HAIR_GROUP_COUNT, isSideStrand, smoothstep, STRAND_COUNT, STRANDS_PER_GROUP, strandReach } from './hairLayout'
 
 export interface Pt { x: number; y: number }
 export type Curve = readonly [Pt, Pt, Pt, Pt]
@@ -70,7 +70,11 @@ export const SCALP_CAP_PATH = `M${pointList(SCALP_CAP_POINTS)}Z`
 // Faint flowing lines across the band so it reads as hair rather than a flat helmet.
 export const SCALP_SHEEN_PATHS: readonly string[] = [0.8, 0.9, 0.97].map((scale) => `M${pointList(scaledHeadTop(scale))}`)
 
-export interface ScalpTint { x: number; color: string; wetness: number; soap: number }
+// Hair shorter than BARE_REACH (in SVG units) leaves the scalp showing; from COVERED_REACH up it hides the head completely.
+const BARE_REACH = 6
+const COVERED_REACH = 30
+
+export interface ScalpTint { x: number; color: string; wetness: number; soap: number; cover: number }
 
 function blend(colors: readonly string[]): string {
   if (colors.length === 0 || colors.some((color) => !/^#[0-9a-f]{6}$/i.test(color))) return colors[0] ?? '#eb9c95'
@@ -78,7 +82,7 @@ function blend(colors: readonly string[]): string {
   return `#${[1, 3, 5].map((offset) => channel(offset).toString(16).padStart(2, '0')).join('')}`
 }
 
-// Each top-of-head column takes the color, wetness and soap of the strands growing from it.
+// Each top-of-head column takes the color, wetness, soap and how much hair is left from the strands growing from it.
 export function scalpTints(hair: readonly Strand[]): ScalpTint[] {
   return Array.from({ length: HAIR_GROUP_COUNT }, (_, group) => group).filter((group) => !isSideStrand(group)).map((group) => {
     const strands = Array.from({ length: STRANDS_PER_GROUP }, (_, layer) => hair[layer * HAIR_GROUP_COUNT + group])
@@ -87,6 +91,7 @@ export function scalpTints(hair: readonly Strand[]): ScalpTint[] {
       color: blend(strands.map((strand) => strand.color)),
       wetness: strands.reduce((sum, strand) => sum + (strand.wetness ?? 0), 0) / strands.length,
       soap: strands.filter((strand) => strand.soapy).length / strands.length,
+      cover: strands.reduce((sum, strand, layer) => sum + smoothstep(BARE_REACH, COVERED_REACH, strandReach(strand.length, layer * HAIR_GROUP_COUNT + group)), 0) / strands.length,
     }
   })
 }

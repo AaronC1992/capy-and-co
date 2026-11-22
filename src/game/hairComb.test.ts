@@ -3,7 +3,7 @@ import { COMB_MIN_PATH, COMB_RADIUS, HairComb } from './hairComb'
 import { HairMotion } from './hairMotion'
 import { strandPoints } from './hair'
 import type { Point } from './hair'
-import { addShape, HAIR_SHAPE_LENGTH, HAIR_SHAPE_LIMIT } from './hairLayout'
+import { addShape, HAIR_SHAPE_LENGTH, HAIR_SHAPE_LIMIT, MIN_LENGTH } from './hairLayout'
 import type { StrandPose } from './hairLayout'
 import { createLook } from './model'
 import type { Look } from './model'
@@ -149,16 +149,23 @@ describe('gel comb', () => {
     }
   })
 
-  it('straightens curls it takes hold of', () => {
+  it('combs curly hair along its own line exactly like straight hair, since curls are only drawn around it', () => {
     const look = createLook('mochi')
-    look.hair[STRAND] = { ...look.hair[STRAND], curl: true }
-    const straight = { ...look.hair[STRAND], curl: false }
-    const at = strandPoints(straight, STRAND)[TOUCH]
-    const { comb } = touch(look, at)
-    drag(comb, look, [at, by(at, 70, 0)])
-    const combed = strandPoints(straight, STRAND, poseOf(comb)!.offsets)
-    const before = strandPoints(straight, STRAND)
-    for (let step = 0; step <= TOUCH - 2; step++) expect(combed[step].x).toBeCloseTo(before[step].x, 6)
+    const curled: Look = { ...look, hair: look.hair.map((strand, index) => index === STRAND ? { ...strand, curl: 1 } : strand) }
+    const at = rest(look)[TOUCH]
+    const combedOffsets = (source: Look) => {
+      const { comb } = touch(source, at)
+      drag(comb, source, [at, by(at, 70, 0)])
+      return poseOf(comb)!.offsets
+    }
+    expect(combedOffsets(curled)).toEqual(combedOffsets(look))
+  })
+
+  it('never takes hold of shaved scalp', () => {
+    const look = createLook('mochi')
+    look.hair[STRAND] = { length: MIN_LENGTH, color: '#eb9c95', curl: 0, flow: 0.3 }
+    const { taken } = touch(look, strandPoints(look.hair[STRAND], STRAND)[0])
+    expect(taken).not.toContain(STRAND)
   })
 
   it('leaves the hair where it was combed once the pose is saved', () => {
