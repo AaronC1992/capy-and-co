@@ -9,12 +9,16 @@ The fantasy RPG/VR project was cancelled before implementation. The current deli
 - Three original capybaras and an illustrated salon.
 - Mouse, pen, and touch interaction using shared gameplay actions.
 - Local per-strand brushing: only hair under the finger bends, each strand flexes along its length from a fixed root, swings and trails like loose hair, and the full brushed shape is saved.
-- 65 fine, independent strands with brush, trim, regrow, curl, soap, wash, blow-dry, and eight-color painting.
+- 65 fine, independent strands with nine tools: brush, gel comb, snip, grow, curl, soap, wash (a water sprayer), blow-dry, and eight-color painting.
 - A hairline that follows the head curve, with a color-matched scalp cover so brushing hair aside never shows a bald top.
 - A directional, flapping blow-dryer: it blows every strand in its stream the way the finger swipes, streams the hair out from the root, flaps it while the air is on it, dries it gradually, and keeps the swept shape.
+- A gel comb: the hair before the point the comb touches stays put, and everything from there to the tip is laid along the line the finger traces, side by side with its neighbors. The combed shape is saved.
+- A water sprayer: a spray bottle follows the finger, and the mist soaks the hair in its radius (darker sheen and droplets). Wet hair slides down and hangs straight, lying over the head instead of through the face. Soap, dye, and curls rinse out, and the hanging pose is saved.
+- Hold-to-curl: the longer a finger stays on a lock, the curlier it gets, from a wave to tight ringlets in about two seconds.
+- Faster hold-to-grow (0.5 length per second) and cutting to a bare scalp, which Grow can bring back.
 - Thick persistent lather that follows styled hair, rinses locally, and appears in saved/exported pictures.
 - Continuous position-based scissors and localized hold-to-grow, including repeated edits within one undoable touch.
-- Five accessories plus removal.
+- 18 outfits in the Dress up tab (saved per friend, shown in saved pictures, and undoable), plus five accessories and removal.
 - Whole-head styling, gesture-level undo, undoable reset.
 - Responsive desktop, tablet, and phone layouts.
 - Keyboard controls, visible focus, modal focus containment, reduced motion.
@@ -33,11 +37,11 @@ Executed during implementation:
 | Check | Result |
 | --- | --- |
 | TypeScript strict checking | Passed |
-| Vitest | 126 tests passed across 9 files; exit code 0 |
+| Vitest | 250 tests passed across 15 files; exit code 0 |
 | Vite production build | Passed |
 | Local server HTTP response | 200 |
 
-Tests cover real model transitions rather than just UI labels: single-lock editing, length bounds, curl/brush behavior, color/wash behavior, multi-lock stroke undo, friend isolation, accessory/reset undo, bounded history, whole-head edits, geometry picking, fast strokes, malformed saves, inaccessible storage, snapshots, and gallery eviction.
+Tests cover real model transitions rather than just UI labels: single-lock editing, length bounds, curl/brush behavior, color/wash behavior, multi-lock stroke undo, friend isolation, accessory/reset undo, bounded history, whole-head edits, geometry picking, fast strokes, malformed saves, inaccessible storage, snapshots, and gallery eviction. Later milestones added tests for the local brush, the blow-dryer, the gel comb, the water sprayer, hold-to-curl, cutting to bald and regrowing, and the 18 outfits; each milestone section below lists what it covers.
 
 ### Continuous-touch refinement
 
@@ -216,6 +220,95 @@ Verification:
 - Chromium mouse: rightward, leftward and downward swipes blew the hair that way and the nozzle followed the finger. Strands flapped while the air was held still. Only the strands behind the nozzle were untouched. The swept shape stayed after release and after reload, soap stayed while dampness dropped, one Undo restored the gesture, and there were no console errors.
 - Not verified: how it feels or performs on a physical tablet. The frame times above are from a desktop PC.
 
+### Gel comb
+
+Feedback: add a comb that works like the brush but gives more control, almost as if the comb had hair gel on it. While the finger is held down, the hair should follow the path the player traced: the hair before the start of the comb stays in place, and everything from the touch outward is moved onto the traced path.
+
+Change:
+
+- Grip (`hairComb.ts`): for every strand within `COMB_RADIUS` (11) of the finger, the nearest point on the strand becomes its anchor. The hair from the root to the anchor stays exactly as drawn, and the strand stays held until the finger lifts, however far the finger travels.
+- Laying down: each segment past the anchor keeps its length and turns toward the direction of the traced line at its own position (read over a 12-unit window, `LINE_WINDOW`), eased by `1 - exp(-length / GEL_TURN)` with `GEL_TURN` 7. Neighboring strands therefore comb side by side. Samples closer than `TRACE_GAP` (0.8) are dropped, and a tap or wobble shorter than `COMB_MIN_PATH` (6) moves nothing.
+- Motion: a stiff, fully damped `GEL_SPRING` moves the hair onto the path without overshoot. The pose is saved as one `pose` action when the finger lifts, so it survives release, reload, and saved pictures, and one Undo reverts the whole stroke.
+- Taking hold of a curly strand straightens it, shaved scalp is never combed, and whole-head Comb straightens the hair like whole-head Brush.
+
+Verification:
+
+- 12 tests in `hairComb.test.ts`: only the strands under the finger are held, once each; nothing moves until the finger has traveled; a shaky finger is ignored; the hair before the touch stays exactly where it was; the hair after the touch lies along the drawn line with every segment keeping its length; neighbors comb side by side; the hold lasts until the finger lifts; poses stay inside the shapes the studio can save; curly hair combs along its own line like straight hair; shaved scalp is never held; and the pose stays once saved.
+- Chromium mouse with a calibrated pointer: strand 2 was pressed 30 units along its length from the root and dragged 80 units east. The hair before the grip stayed identical to the original, the tail turned east at the grip, the strand's length stayed 91.6 units, strands 3 and 15 were combed in parallel with it, and the pose was unchanged 600 ms after release.
+- The combed tail runs about 8 units to the side of the finger's own line. That is the gel bend the model predicts (a typical 3.8-unit segment turns about 42% of the way toward the line). Lowering `GEL_TURN` makes the tail hug the line more tightly.
+- Not verified: how the comb feels under a real finger. Its constants were tuned by eye on a desktop.
+
+### Water sprayer and wet hair
+
+Feedback: make Wash a sprayer that sprays water the player can see getting the hair wet, and make wet hair fall straight down as if it were heavy.
+
+Change:
+
+- Spray (`hairSprayer.ts`, drawn by `SprayStream`): a spray bottle floats up and to the left of the fingertip (`NOZZLE_OFFSET`) and points at it. Strands within `SPRAY_RADIUS` (44) of the fingertip are sprayed, at full strength within the inner 35% of that radius.
+- Wetting: hair gets wet at `WET_RATE` (1.8 per second, so about half a second at full strength), plus an instant `SPLASH` (0.3) so the first touch of mist shows at once.
+- Hanging (`hairDroop.ts`): the more a strand is wetted, the further it is pulled down toward hanging straight, with its root fixed and every segment keeping its length (`droopChain`; the tuning constants `ROOT_GIVE` and `GIVE_RUN` are explained under "Water sprayer and wet hair" in `ARCHITECTURE.md`). A 101 x 88 distance field of the head outline (`headShape.ts`, `CLEARANCE` 2.5, `CLIMB` 0.4), built by `warmHeadShape()` when Wash is chosen, makes hair from the crown drape over the head instead of passing through it.
+- Rinse: the first water that reaches a strand (`RINSE_AT` 0.04) washes it: soap off, dye back to the natural color, curls straightened. The haircut stays.
+- Saving: poses refresh every `POSE_INTERVAL` (50 ms) while the finger is down and are saved as one `air` action on release, so the gesture is one Undo step. "Do all the hair" with Wash soaks the whole head and hangs it the same way (`soakedOffsets`).
+
+Verification:
+
+- 16 tests in `hairSprayer.test.ts` (where the mist lands, soaking in about half a second, wetness never lowered or past full, rinsing once, passing over shaved scalp, hanging with the root and lengths unchanged, hanging further the longer it is sprayed, staying soaked and hanging when the finger moves on, throttled poses that still settle on the exact final pose, the bottle's position, real pointer points), 9 in `hairDroop.test.ts` (fixed roots and lengths, side hair hanging straight down, crown hair flopping over the head, no sinking into the head, a little movement at a time as water soaks in), and 5 in `headShape.test.ts` (the distance field matches the drawn head outline).
+- Chromium mouse, Wash held on the crown while dragging from (250, 150) to (250, 175) over 1.5 s: the spray appeared only while the pointer was down, and 24 of the 65 strands became fully wet. Strand 3's tip went from 87.9 units above its root to 54.7 units below it with its length unchanged (88.6 to 88.5). Strands 3 and 16, which clear the head, hung 11.4 and 5.9 degrees from vertical. Shorter strands lie along the head instead, so across all wet strands the mean angle from vertical was 34.5 degrees (maximum 57). The wet count and the shapes were unchanged after release.
+- Reload: see the final-build checks below, where the same 12 wet strands and identical shapes were restored.
+- Not verified: how the sprayer looks and feels on a real tablet.
+
+### Hold-to-curl, faster grow, and cutting to bald
+
+Feedback: the Curl tool did not really curl the hair; the longer the player holds on a strand, the more curls it should get. Grow was a little too slow. Snip must be able to cut the hair all the way to the scalp, leaving the head bald, while Grow can still regrow it.
+
+Change:
+
+- Curl: a strand's `curl` is now a strength from 0 to 1 instead of an on/off flag. `HairCurler` adds `CURL_PER_SECOND` (0.5) to every strand under the finger while it is held, so a hold takes about 2 seconds to go from straight to ringlets, and it stops when the finger lifts. Older true/false saves still load (true becomes 0.4). A whole-head Curl press adds `CURL_PER_PRESS` (0.34), so three presses give full curls.
+- Drawing curls (`curlyPoints`): the strand's own line is wrapped in a wave whose pitch tightens from 64 to 21 and whose radius grows from 3 to 10.5 as curl goes from 0 to 1 (a gentle wave, then loops, then ringlets), drawn through `CURL_DENSITY` (3) points per segment. The strand's own line never changes, so the other tools treat a curly strand like a straight one.
+- Grow: `GROWTH_PER_SECOND` went from 0.24 to 0.5, about twice as fast. Regrowing from bare scalp to full length takes 2.4 seconds of holding.
+- Cutting to bald: `cutHairStroke` shaves a strand when a cut leaves less than `BALD_REACH` (12 SVG units) of it (`MIN_LENGTH` -0.2). A shaved strand is not drawn, every tool except Grow skips it, and the scalp cover thins out so the head shows bare. Shaving clears the strand's brushed pose, curl, soap, and water but keeps its color, so Grow brings it back in the same color.
+
+Verification:
+
+- 11 tests in `hairCurl.test.ts` (more curl the longer the hold, up to the tightest; the same speed at any frame rate; only the strands under the finger; the hold moving along with the finger; no double counting between move events; stalled frames; stopping at full curl and on release or cancel; shaved scalp never curled). The shave and regrow cases are in `hairEditing.test.ts`, `model.test.ts`, `hair.test.ts`, and `storage.test.ts` (including that a shaved head survives a reload), plus a shaved-lock drawing case in `render.test.tsx`.
+- Chromium mouse, Grow: a stationary hold grew 15 strands at about 51 units per second. Strand 7 went from 68 to 129 units in about 1.2 s and then stopped at the maximum, and growth stopped as soon as the finger lifted.
+- Chromium mouse, Snip and Grow: one Snip sweep along the roots took the drawn strands from 65 to 0 with Undo enabled, and Grow held at (232, 186) for 1.5 s brought 11 strands back, the longest from 10.8 to 83.5 units.
+- Chromium mouse, Curl: a hold on strand 7 took its chord-to-arc ratio (1 is straight) from 0.99 at the start to 0.93, 0.84, 0.58, 0.45, and 0.33 at 0.46, 0.92, 1.37, 1.83, and 2.28 s, and then it stopped changing. The arc length went from 66.7 to 197.4 units, and one hold curled 14 strands. Whole-head Curl presses stored curl 0.34, 0.68, and 1.0, and a fourth press stayed at 1.0.
+- Reload: see the final-build checks below.
+- Not verified: how holding, curling, and growing feel under a real finger.
+
+### Dress-up outfits
+
+Feedback: add at least 15 different clothes to change into in the Dress up tab.
+
+Change:
+
+- 18 outfits (`OUTFITS` in `model.ts`, one table of art in `Outfit.tsx`): Cozy cape, Super capy, Snuggly sweater, Overalls, Princess gown, Twirly tutu, Comfy hoodie, Rainy day coat, Party dress, Star tee, Flower lei, Wizard robe, Sailor top, Chef apron, Sleepy PJs, Rainbow poncho, Fancy suit, and Fairy wings. The Cozy cape is the original look and the default.
+- Each outfit is drawn in two layers, one behind the paws and one in front of them, using plain SVG attributes only (no CSS, filters, or remote assets), so it also appears in the gallery and in exported PNGs.
+- The outfit belongs to each friend and is saved with her look and with every saved picture. Reset returns the Cozy cape, Undo steps back one outfit at a time, and choosing the outfit already worn does nothing. An outfit that does not exist is rejected with a visible warning, and saves from before outfits existed open in the Cozy cape.
+- The Dress up tab keeps the selected tool, so a player can change clothes and carry on styling.
+
+Verification:
+
+- Tests: `model.test.ts` (at least 15 distinct outfits with one default, only the active friend changes, one Undo per change, unknown outfits ignored, every outfit can be tried on in turn, Reset restores the Cozy cape), `storage.test.ts` (outfits survive a reload in looks and in saved pictures, and unknown outfits are rejected), and `render.test.tsx` (every outfit draws differently on every friend, every gradient it uses is defined once, every outfit has a small icon and a name, and tapping one puts it on through the same game action as an accessory).
+- Chromium mouse, production build: the tab showed 18 tiles with the expected names, exactly one tile was pressed at a time, the 18 outfits drew 18 distinct pictures, Undo stepped back from Fairy wings to Fancy suit to Rainbow poncho, and `localStorage` held `"outfit":"poncho"` for the active friend. Fairy wings was still worn after a reload with no page or console errors.
+- On an earlier near-final build (not re-measured on the final one): the gallery shows outfits, the exported SVG carries the outfit art, and the tiles lay out in 3 columns at 800 and 390 pixels. The real Download button was not exercised headless.
+- Frame rate with an outfit on: see the final-build checks below.
+- Not verified: how comfortable the tiles are to tap on a real tablet.
+
+### Final-build sweep, reload checks, and frame rate
+
+Run against a production build of the final code (`vite preview`) in headless desktop Chromium with a real mouse. The sweep and the two reload runs listened for page errors, console errors and warnings, external requests, and on-page alerts.
+
+- Smoke sweep: a diagonal drag (held still for 450 ms first) with each of the nine tools changed the picture every time. Snip took the drawn strands from 65 to 50, and Grow brought them back to 65. The water spray was present only while Wash was pressed, and the airflow only while Blow-dry was pressed. Each of the 18 outfits left exactly one pressed tile and drew a distinct picture, and the last one tried (Fairy wings) was still worn after a reload. No page errors, console errors or warnings, external requests, or on-page alerts occurred.
+- Reload after a combined look: a diagonal Snip, a Comb stroke across the head, a 1.8 s Curl hold, and a 1.5 s Wash on the crown, then a reload. Before and after the reload there were 50 drawn strands and 12 wet strands, no strand was missing, no length, tip, or midpoint differed, and no wetness differed. The saved game was 18,949 bytes. No page or console errors occurred. (The cut and the spray left no curly strands in that run, so curls were checked on their own next.)
+- Reload after curling: after Reset, a 2.4 s Curl hold on strand 7 left 15 curly strands. After a reload, 15 strands were still curly, all 65 were still drawn, strand 7 was drawn with 73 points and an arc length of 197.4 units both times (13 points and 68 units before it was curled), and no length, tip, or midpoint differed. No page or console errors occurred.
+- Frame rate while blowing (headless Chromium with software rendering, mouse, not a tablet): idle held at about 60.6 fps, the display's cap. Sweeping the dryer over a full head of straight hair with the Style tab open ran at about 33 to 34 fps (33.3, 33.7, and 34.2 in three runs). A near-final build measured the same (33.1 and 33.4 fps straight, 13.9 fps curly), so these frame rates are not the result of a late change. A head of full curls under the dryer ran at about 12 to 15 fps (14.7 at curl 0.34, 14.2 at 0.68, and 12.1 at 1.0, with the worst frame gaps 167 to 200 ms). A curled strand is drawn through all 73 points, while an untouched straight one is drawn through 13.
+- Outfits and frame rate: with the Dress up tab open and the dryer swept in circles over the crown, the cozy cape, rainbow poncho, party dress, and fairy wings each ran at about 27 to 31 fps in two runs, and none was consistently slower. That sweep differs from the ones above, so compare those four numbers with each other and not with the others.
+- Not verified: frame rate or touch feel on a physical tablet. Every number here is from a desktop.
+
+### General browser checks (earlier builds)
+
 Executed with Chromium browser automation:
 
 - Opened the running app and inspected desktop and phone rendering.
@@ -244,17 +337,21 @@ Use a current Chrome/Edge desktop browser, Android Chrome, and iPad/iPhone Safar
 - [ ] All three friends, tools, colors, and accessory controls are comfortably tappable.
 - [ ] Drag across several locks; confirm one Undo reverses the full gesture.
 - [ ] With Brush, drag a fingertip through one small patch of hair; only the strands under your finger should bend, with the neighbors easing off gradually. Brush right, left, up, and down without lifting; the hair should stay where you leave it after release and reload.
+- [ ] With Comb, press on a strand partway along its length and drag a path: the hair before your finger should stay put, and the hair from your finger outward should follow the path you traced, side by side with its neighbors and without swinging. It should stay there after you lift and after a reload. A quick tap or a wobble should not move anything.
 - [ ] Swipe Soap across a patch, switch tools, and wait; its bubbles should stay. Brush the soaped patch and check the bubbles move with it.
-- [ ] Wash one soaped patch without rinsing the others, then use whole-head Wash. Save a soapy picture and confirm later washing does not change that picture.
-- [ ] Wash, then hold Blow-dry near one damp patch and swipe it across the hair; every strand in the stream should be blown the way you swipe, flap while the air is on it, and dry gradually. Hair behind the dryer should not move. Move to another patch and confirm the first stops changing.
-- [ ] Release Blow-dry and reload: the dry state and the blown shape should remain. Blow-drying soapy hair must not remove its bubbles. Check that blowing stays smooth (no stutter) on the tablet.
+- [ ] Hold Wash over one soaped patch: a visible mist should wet the hair there, the wet hair should hang straight down, and the soap and any dye should rinse off while the haircut stays. Hair outside the mist should not change. Let go and reload: the wet, hanging hair should stay as it is. Then use whole-head Wash. Save a soapy picture and confirm later washing does not change that picture.
+- [ ] Spray a patch with Wash, then hold Blow-dry near it and swipe across the hair; every strand in the stream should be blown the way you swipe, flap while the air is on it, and dry gradually. Hair behind the dryer should not move. Move to another patch and confirm the first stops changing.
+- [ ] Release Blow-dry and reload: the dry state and the blown shape should remain. Blow-drying soapy hair must not remove its bubbles. Check that blowing stays smooth (no stutter) on the tablet, with straight hair, with an outfit on, and with a whole head of full curls, which is the slowest case.
 - [ ] With Snip, draw a cut line and revisit the same area lower down without lifting; only the crossed locks should shorten.
-- [ ] With Grow, hold one patch still, slide to another, then release; growth should follow the finger and stop immediately on release.
+- [ ] With Grow, hold one patch still, slide to another, then release; growth should follow the finger and stop immediately on release. A hold of about a second should visibly lengthen the hair.
+- [ ] With Curl, hold one patch still: the longer you hold, the curlier it should get (about 2 seconds to tight ringlets), and it should stop the moment you lift. Slide your finger across more hair to curl several patches. Reload and confirm the curls stay.
 - [ ] Cut a lock short, then regrow it. Try brush, curls, dye, and wash.
+- [ ] With Snip, cut a patch right down to the scalp: it should look bald, with no leftover bits of hair. Hold Grow on that patch: the hair should grow back in its own color, reaching full length in about 2.4 seconds. Reload and confirm a bald patch stays bald.
 - [ ] Touches on the face/background do not change hair.
 - [ ] A second finger does not trigger an extra styling gesture.
 - [ ] Lift a finger outside the character; the next gesture still works.
 - [ ] Scroll outside the character, rotate the device, and keep playing.
+- [ ] Open Dress up and tap through all 18 outfits: exactly one is highlighted at a time and the capybara wears it. Save a picture and download a PNG while wearing an outfit and confirm both show it. Undo steps back one outfit at a time, Reset returns the cozy cape, and each friend keeps her own outfit.
 - [ ] Apply accessories and reset; undo both operations.
 - [ ] Save a picture, close/reopen the browser, and find it in My gallery.
 - [ ] Download a PNG and open it from the device's Files/Downloads app.
@@ -265,6 +362,17 @@ Use a current Chrome/Edge desktop browser, Android Chrome, and iPad/iPhone Safar
 
 ## Known limitations and next milestone
 
-Hosted publicly on GitHub Pages at https://aaronc1992.github.io/capy-and-co/ (see "GitHub Pages deployment" above). There is no native installer, service worker/offline launch, or cloud gallery. Browser storage is per origin and can be cleared by the device, so pictures saved on one device or browser do not appear on another. Hair consists of stylized editable locks, not fluid strand simulation; accessories use predefined positions.
+Hosted publicly on GitHub Pages at https://aaronc1992.github.io/capy-and-co/ (see "GitHub Pages deployment" above). There is no native installer, service worker/offline launch, or cloud gallery. Browser storage is per origin and can be cleared by the device, so pictures saved on one device or browser do not appear on another. Hair consists of stylized editable locks, not fluid strand simulation; accessories and outfits use predefined positions.
 
-Next: a supervised real-tablet playtest using the hosted link, any resulting touch/feedback improvements, and verified native-browser downloads. More content can follow after that feedback.
+Limitations of the newest features:
+
+- A whole head of full curls under the blow-dryer is the slowest thing the game draws: about 12 to 15 fps against about 34 for straight hair, in headless desktop Chromium with software rendering. A curled strand is drawn through 73 points against 13 to 25 for a straight one. Brush, Comb, and Wash straighten hair, so the slowdown goes away once the curls are styled out. A real tablet has not been tested. If a tablet stutters, the first thing to try is lowering `CURL_DENSITY`, or drawing curly strands with fewer points while the dryer is running.
+- Outfits and accessories have fixed placements; they do not adapt to the hair or to movement.
+- Drying sprayed hair lowers its wetness but does not make it fluff back up by itself: it stays hanging until it is brushed, combed, or blown into a new shape.
+- Water rinses a strand as soon as the mist reaches it: the soap comes off, the dye returns to the friend's natural color, and curls straighten (the same as Wash always has); the haircut stays. Spray before coloring or curling, not after.
+- Cutting to the scalp clears the strand's brushed pose, curl, soap, and water (the color is kept), so Grow brings it back in the same color but without the old style.
+- The comb's tail runs about 8 units to the side of the finger's own line. That is the designed gel bend (`GEL_TURN`), tuned by eye.
+- Friend cards show only the head and hair, cropped above the clothes.
+- Speeds and sizes were tuned by eye on a desktop and may need adjusting after a tablet playtest: `CURL_PER_SECOND`, `GROWTH_PER_SECOND`, `BALD_REACH`, `COMB_RADIUS`, `GEL_TURN`, `SPRAY_RADIUS`, and `WET_RATE`.
+
+Next: a supervised real-tablet playtest using the hosted link, paying particular attention to how the comb, hold-to-curl, and sprayer feel and to blow-dryer smoothness on curly hair; any resulting touch/feedback improvements; and verified native-browser downloads. More content can follow after that feedback.
