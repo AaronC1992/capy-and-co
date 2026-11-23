@@ -54,7 +54,7 @@ export function DressUpPanel({ look, name, clip, onClip, onWear, dispatch }: Pro
   }
   return <div className="accessory-panel">
     <h3>Clips and cuties</h3>
-    <p>{full ? `${name} has ${MAX_CLIPS} clips! Drag one off to make room.` : `Pick one, then tap anywhere on ${name}. Drag clips, hats, glasses and headbands to move them, or off to take them off.`}</p>
+    <p>{full ? `${name} has ${MAX_CLIPS} clips! Drag one to the trash can to make room.` : `Pick one, then tap anywhere on ${name}. Drag clips, hats, glasses and headbands to move them, or drop them in the trash can to take them off.`}</p>
     <div className="wear-grid" role="group" aria-label="Clips">{CLIP_KINDS.map((kind) =>
       <button key={kind} className={`tool-button ${clip === kind ? 'selected' : ''}`} aria-pressed={clip === kind} onClick={() => addClip(kind)}>
         <WearableIcon slot="clip" item={kind} /><span className="tool-label">{CLIP_LABELS[kind]}</span>

@@ -170,6 +170,8 @@ export type SalonAction =
   | { type: 'place'; slot: WearSlot; x: number; y: number }
   // Every clip being worn, after one was put on, moved or taken off.
   | { type: 'clips'; clips: Clip[] }
+  // Takes off every clip, the hat, the glasses and the headband in one go (makeup and the outfit stay).
+  | { type: 'undress' }
   | { type: 'outfit'; outfit: Outfit }
   | { type: 'undo' }
   | { type: 'reset' }
@@ -209,6 +211,11 @@ function movedBack(look: Look, slot: WearSlot): Look {
   const next: Look = { ...look, placed }
   if (!Object.keys(placed).length) delete next.placed
   return next
+}
+
+// Whether the capybara has any clip, hat, glasses or headband on that `undress` could take off.
+export function isDressed(look: Look): boolean {
+  return look.clips.length > 0 || look.hat !== 'none' || look.glasses !== 'none' || look.headband !== 'none'
 }
 
 function remember(state: SalonState): Look[] {
@@ -373,6 +380,12 @@ export function salonReducer(state: SalonState, action: SalonAction): SalonState
   if (action.type === 'clips') {
     if (action.clips.length > MAX_CLIPS || !action.clips.every(isClip) || sameClips(action.clips, current.clips)) return state
     return { ...state, looks: { ...state.looks, [state.active]: { ...current, clips: action.clips.map((clip) => ({ ...clip })) } }, history: remember(state) }
+  }
+  if (action.type === 'undress') {
+    if (!isDressed(current)) return state
+    const bare: Look = { ...current, clips: [], hat: 'none', glasses: 'none', headband: 'none' }
+    delete bare.placed
+    return { ...state, looks: { ...state.looks, [state.active]: bare }, history: remember(state) }
   }
   if (action.type === 'outfit') {
     if (action.outfit === current.outfit || !OUTFITS.includes(action.outfit)) return state

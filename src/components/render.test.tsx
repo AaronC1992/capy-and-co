@@ -358,7 +358,7 @@ describe('dress-up outfits', () => {
     buttonsIn(DressUpPanel({ look: full, name: 'Mochi', clip: 'bow', onClip, onWear, dispatch }))[1].props.onClick()
     expect(onClip).toHaveBeenLastCalledWith('daisy')
     expect(dispatch).not.toHaveBeenCalled()
-    expect(renderToStaticMarkup(<DressUpPanel look={full} name="Mochi" clip="bow" onClip={onClip} onWear={onWear} dispatch={dispatch} />)).toContain('Mochi has 12 clips! Drag one off to make room.')
+    expect(renderToStaticMarkup(<DressUpPanel look={full} name="Mochi" clip="bow" onClip={onClip} onWear={onWear} dispatch={dispatch} />)).toContain('Mochi has 12 clips! Drag one to the trash can to make room.')
   })
 })
 

@@ -79,6 +79,14 @@ nav { display: flex; align-items: center; gap: 22px; }
 .studio-tip svg { color: #b4a17b; }
 .all-hair-button { position: absolute; bottom: 16px; right: 16px; display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 39px; background: #fffaf0e8; color: #606f55; border: 1px solid #d9ceba; border-radius: 24px; font-size: 10px; padding: 8px 12px; }
 .all-hair-button:hover { background: #f1f3e7; }
+.trash-can { position: absolute; top: 16px; left: 16px; z-index: 2; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; width: 84px; height: 84px; padding: 6px; border-radius: 22px; background: #fffaf0d9; border: 2px dashed #d9ceba; color: #8a8270; font-size: 8px; line-height: 1.25; text-align: center; pointer-events: none; transition: transform .15s, background .15s, border-color .15s, color .15s; }
+.trash-can svg { color: #b4a17b; transition: transform .15s, color .15s; }
+.trash-can.ready { border-color: #d49a9a; color: #96605f; background: #fff3f0ee; animation: beckon 1s ease-in-out infinite; }
+.trash-can.ready svg { color: #d49a9a; }
+.trash-can.over { transform: scale(1.12); border-style: solid; border-color: #c96b6b; background: #ffe3dd; color: #8c3d3d; animation: none; }
+.trash-can.over svg { color: #c96b6b; transform: rotate(-12deg); }
+@keyframes beckon { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.06); } }
+@media (prefers-reduced-motion: reduce) { .trash-can.ready { animation: none; } }
 .toolbox { background: #fffefa; border: 1px solid #e7e6dc; border-radius: 23px; padding: 16px 20px 18px; box-shadow: 0 5px 16px #565d3803; position: sticky; top: 14px; max-height: calc(100vh - 94px); max-height: calc(100dvh - 94px); overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
 .tool-tabs { display: grid; grid-template-columns: .9fr .9fr 1.2fr; gap: 3px; background: #f3f3eb; border-radius: 10px; padding: 4px; margin: 0 0 16px; }
 .tool-tabs button { background: transparent; border-radius: 7px; min-height: 37px; font-size: 11px; color: #909382; }
@@ -281,6 +289,7 @@ nav { display: flex; align-items: center; gap: 22px; }
   .studio-actions { right: 10px; top: 55px; flex-direction: column; }
   .studio-actions .round-button { width: 36px; height: 36px; min-width: 36px; }
   .studio-tip { bottom: 66px; font-size: 9px; padding: 7px 9px; }
+  .trash-can { top: 12px; left: 12px; width: 72px; height: 72px; }
   .all-hair-button { bottom: 17px; right: 14px; }
   .photo-button { font-size: 11px; padding-inline: 12px; }
   .color-grid { grid-template-columns: repeat(3, 1fr); gap: 8px; }
@@ -309,6 +318,8 @@ nav { display: flex; align-items: center; gap: 22px; }
   .studio-actions .round-button { width: 38px; height: 38px; min-width: 38px; }
   .studio-tip { bottom: 15px; max-width: 61%; background: #fffaf0de; font-size: 8px; }
   .studio-tip svg { width: 14px; }
+  .trash-can { width: 66px; height: 66px; border-radius: 18px; font-size: 7px; }
+  .trash-can svg { width: 20px; height: 20px; }
   .all-hair-button { bottom: 12px; right: 10px; font-size: 9px; padding: 7px 9px; }
   .toolbox { padding: 14px; border-radius: 20px; position: static; max-height: none; overflow: visible; }
   .tool-tabs { margin: 0 0 14px; }

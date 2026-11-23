@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { Dispatch, PointerEvent } from 'react'
 import type { ClipKind, DyeMode, HairAirEdit, HairCurlEdit, HairLengthEdit, Look, SalonAction, Tool, WearSlot } from '../game/model'
-import { applyHairAir, applyHairCurl, applyHairLengths, CHARACTERS, MAX_CLIPS, STAGE, STRAND_COUNT } from '../game/model'
+import { applyHairAir, applyHairCurl, applyHairLengths, CHARACTERS, isDressed, MAX_CLIPS, STAGE, STRAND_COUNT } from '../game/model'
 import { canWearAt, clipAt, clipPosition, clipUnder, isWearable, nextClipSpot, wornSpot, wornUnder } from '../game/accessories'
 import { hitHairStroke, strandPoints } from '../game/hair'
 import type { Point } from '../game/hair'
@@ -89,6 +89,8 @@ interface Carried {
   moved: boolean
 }
 const CLIP_SLIDE = 6
+// Fingers aren't precise: dropping this close to the trash can still counts as dropping in it.
+const TRASH_REACH = 14
 
 const REACTION_SOUNDS: Record<Reaction, Sound> = { 'poked-left': 'poke', 'poked-right': 'poke', sneeze: 'sneeze', boop: 'boing', ticklish: 'giggle' }
 
@@ -102,12 +104,15 @@ interface Feeling {
 
 export function Studio({ look, tool, color, dye, decorating, clip, dispatch, onStyle, canUndo }: Props) {
   const svgRef = useRef<SVGSVGElement>(null)
+  const trashRef = useRef<HTMLDivElement>(null)
   const gesture = useRef<HairGesture | null>(null)
   const carried = useRef<Carried | null>(null)
   const feeling = useRef<Feeling | null>(null)
   const reacting = useRef<{ reaction: Reaction; until: number } | null>(null)
   const [beat, setBeat] = useState(0)
   const [lifted, setLifted] = useState<Lifted | null>(null)
+  // Whether the clip, hat, glasses or headband being carried is held over the trash can.
+  const [binning, setBinning] = useState(false)
   const { motion, offsets, animate, reset, publish } = useHairMotion(editOnFrame)
   const [mood, setMood] = useState<Mood>('calm')
   const [dragging, setDragging] = useState(false)
@@ -118,8 +123,8 @@ export function Studio({ look, tool, color, dye, decorating, clip, dispatch, onS
   const full = look.clips.length >= MAX_CLIPS
   const clipName = CLIP_LABELS[clip].toLowerCase()
   const hint = !decorating ? TOOL_HINTS[tool]
-    : full ? 'That’s a lot of clips! Drag one off to make room.'
-      : `Tap anywhere on ${friend.name} to add a ${clipName}. Drag anything ${friend.name} is wearing to move it, or off to take it off.`
+    : full ? 'That’s a lot of clips! Drag one to the trash can to make room.'
+      : `Tap anywhere on ${friend.name} to add a ${clipName}. Drag anything ${friend.name} is wearing to move it, or drop it in the trash can to take it off.`
   useEffect(() => () => { if (timer.current) clearTimeout(timer.current) }, [])
   useEffect(() => {
     const current = gesture.current
@@ -138,6 +143,7 @@ export function Studio({ look, tool, color, dye, decorating, clip, dispatch, onS
     setAirflow(null)
     setSpray(null)
     setLifted(null)
+    setBinning(false)
   }, [look.character, tool, decorating, reset])
   // The sprayer measures hair against the head's outline; build it before the first spray so that touch isn't slow.
   useEffect(() => { if (tool === 'wash') warmHeadShape() }, [tool])
@@ -192,6 +198,14 @@ export function Studio({ look, tool, color, dye, decorating, clip, dispatch, onS
     point.x = event.clientX
     point.y = event.clientY
     return point.matrixTransform(matrix.inverse())
+  }
+
+  // Whether the finger is over the trash can. The can sits outside the picture, so it is measured on the screen.
+  function overTrash(event: { clientX: number; clientY: number }): boolean {
+    const box = trashRef.current?.getBoundingClientRect()
+    if (!box) return false
+    return event.clientX > box.left - TRASH_REACH && event.clientX < box.right + TRASH_REACH
+      && event.clientY > box.top - TRASH_REACH && event.clientY < box.bottom + TRASH_REACH
   }
 
   // Touching hair makes the capybara react; only a saved change (`started`) earns an undo step. Held tools keep
@@ -404,7 +418,7 @@ export function Studio({ look, tool, color, dye, decorating, clip, dispatch, onS
     }
   }
 
-  function moveCarried(point: Point) {
+  function moveCarried(point: Point, binned: boolean) {
     const held = carried.current
     if (!held) return
     if (!held.moved && Math.hypot(point.x - held.from.x, point.y - held.from.y) > CLIP_SLIDE) {
@@ -413,17 +427,19 @@ export function Studio({ look, tool, color, dye, decorating, clip, dispatch, onS
     }
     if (!held.moved) return
     const spot = carriedTo(held, point)
-    setLifted({ item: held.item, ...spot, away: !fitsAt(held.item, spot) })
+    setBinning(binned)
+    setLifted({ item: held.item, ...spot, away: binned || !fitsAt(held.item, spot) })
   }
 
-  // Lets go of whatever is being carried: it goes on where it is dropped, or comes off if dropped away from the
-  // capybara. A tap on the hat, glasses or headband that didn't carry it puts a clip there or pokes, as it would
-  // anywhere else.
-  function dropCarried(point: Point | null, poked: BodySpot | null = null) {
+  // Lets go of whatever is being carried: it goes on where it is dropped, or comes off if dropped in the trash can
+  // or away from the capybara. A tap on the hat, glasses or headband that didn't carry it puts a clip there or
+  // pokes, as it would anywhere else.
+  function dropCarried(point: Point | null, poked: BodySpot | null = null, binned = false) {
     const held = carried.current
     if (!held) return
     carried.current = null
     setLifted(null)
+    setBinning(false)
     if (svgRef.current?.hasPointerCapture(held.id)) svgRef.current.releasePointerCapture(held.id)
     if (!point) return
     const item = held.item
@@ -432,7 +448,7 @@ export function Studio({ look, tool, color, dye, decorating, clip, dispatch, onS
       return
     }
     const spot = carriedTo(held, point)
-    const fits = fitsAt(item, spot)
+    const fits = !binned && fitsAt(item, spot)
     if (typeof item === 'number') {
       const others = look.clips.filter((_, index) => index !== item)
       // A moved clip goes on top of the others.
@@ -561,7 +577,7 @@ export function Studio({ look, tool, color, dye, decorating, clip, dispatch, onS
       onPointerMove={(event) => {
         if (carried.current?.id === event.pointerId) {
           const point = pointFromEvent(event)
-          if (point) moveCarried(point)
+          if (point) moveCarried(point, overTrash(event))
           return
         }
         const styling = gesture.current?.id === event.pointerId
@@ -583,7 +599,7 @@ export function Studio({ look, tool, color, dye, decorating, clip, dispatch, onS
         const point = pointFromEvent(event)
         const poked = letGo(event.pointerId, point, event.timeStamp)
         if (carried.current?.id === event.pointerId) {
-          dropCarried(point, poked)
+          dropCarried(point, poked, overTrash(event))
           return
         }
         const current = gesture.current?.id === event.pointerId ? gesture.current : null
@@ -611,8 +627,12 @@ export function Studio({ look, tool, color, dye, decorating, clip, dispatch, onS
       }}
     />
     <div className="studio-tip"><Icon name="sparkles" size={17} /><span>{hint}</span></div>
+    {decorating && <div ref={trashRef} className={`trash-can ${lifted ? 'ready' : ''} ${binning ? 'over' : ''}`} data-testid="trash-can">
+      <Icon name="trash" size={24} />
+      <span>{binning ? 'Let go to take it off!' : 'Drop here to take off'}</span>
+    </div>}
     {decorating
-      ? <button className="all-hair-button" disabled={!look.clips.length} onClick={() => { dispatch({ type: 'clips', clips: [] }); reactToStyling() }}><Icon name="trash" size={17} /> Take off the clips</button>
+      ? <button className="all-hair-button" disabled={!isDressed(look)} onClick={() => { dispatch({ type: 'undress' }); reactToStyling() }}><Icon name="trash" size={17} /> Take it all off</button>
       : <button className="all-hair-button" onClick={styleAll}><Icon name={tool} size={17} /> Do all the hair</button>}
   </section>
 }
