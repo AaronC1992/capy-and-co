@@ -26,6 +26,8 @@ import { addShape } from '../game/hairLayout'
 import type { StrandPose } from '../game/hairLayout'
 import { BodyTouch, isFaceSpot, isReaction, REACTION_TIMES, reactionFor, spotAt } from '../game/reactions'
 import type { BodySpot, Reaction } from '../game/reactions'
+import type { GraphicsQuality } from '../game/performance'
+import { useInView } from './usePerformance'
 
 interface Props {
   look: Look
@@ -38,6 +40,9 @@ interface Props {
   dispatch: Dispatch<SalonAction>
   onStyle: (sound: Sound) => void
   canUndo: boolean
+  graphics?: GraphicsQuality
+  fps?: number
+  active?: boolean
 }
 
 export const TOOL_HINTS: Record<Tool, string> = {
@@ -102,18 +107,22 @@ interface Feeling {
   busy: boolean
 }
 
-export function Studio({ look, tool, color, dye, decorating, clip, dispatch, onStyle, canUndo }: Props) {
+export function Studio({ look, tool, color, dye, decorating, clip, dispatch, onStyle, canUndo, graphics = 'high', fps = 60, active = true }: Props) {
+  const panelRef = useRef<HTMLElement>(null)
+  const inView = useInView(panelRef)
+  const rendering = active && inView
   const svgRef = useRef<SVGSVGElement>(null)
   const trashRef = useRef<HTMLDivElement>(null)
   const gesture = useRef<HairGesture | null>(null)
   const carried = useRef<Carried | null>(null)
   const feeling = useRef<Feeling | null>(null)
+  const moves = useRef<{ point: Point; binned: boolean }[]>([])
   const reacting = useRef<{ reaction: Reaction; until: number } | null>(null)
   const [beat, setBeat] = useState(0)
   const [lifted, setLifted] = useState<Lifted | null>(null)
   // Whether the clip, hat, glasses or headband being carried is held over the trash can.
   const [binning, setBinning] = useState(false)
-  const { motion, offsets, animate, reset, publish } = useHairMotion(editOnFrame)
+  const { motion, offsets, animate, reset, publish } = useHairMotion(editOnFrame, rendering, fps)
   const [mood, setMood] = useState<Mood>('calm')
   const [dragging, setDragging] = useState(false)
   const [airflow, setAirflow] = useState<AirJet | null>(null)
@@ -138,6 +147,7 @@ export function Studio({ look, tool, color, dye, decorating, clip, dispatch, onS
     carried.current = null
     if (held && svgRef.current?.hasPointerCapture(held.id)) svgRef.current.releasePointerCapture(held.id)
     feeling.current = null
+    moves.current = []
     reset()
     setDragging(false)
     setAirflow(null)
@@ -294,6 +304,7 @@ export function Studio({ look, tool, color, dye, decorating, clip, dispatch, onS
   }
 
   function editOnFrame(now: number): boolean {
+    flushMoves()
     const current = gesture.current
     if (!current || current.look.character !== look.character || document.hidden) return false
     if (current.growth && tool === 'grow') {
@@ -431,6 +442,19 @@ export function Studio({ look, tool, color, dye, decorating, clip, dispatch, onS
     setLifted({ item: held.item, ...spot, away: binned || !fitsAt(held.item, spot) })
   }
 
+  function flushMoves() {
+    const pending = moves.current
+    moves.current = []
+    for (const { point, binned } of pending) {
+      if (carried.current) moveCarried(point, binned)
+      else {
+        if (gesture.current) stroke(point)
+        const tickled = feeling.current?.body.move(point)
+        if (tickled && !gesture.current?.touched.size) react(tickled, true)
+      }
+    }
+  }
+
   // Lets go of whatever is being carried: it goes on where it is dropped, or comes off if dropped in the trash can
   // or away from the capybara. A tap on the hat, glasses or headband that didn't carry it puts a clip there or
   // pokes, as it would anywhere else.
@@ -460,7 +484,7 @@ export function Studio({ look, tool, color, dye, decorating, clip, dispatch, onS
   }
 
   function start(event: PointerEvent<SVGSVGElement>) {
-    if (gesture.current || carried.current || !event.isPrimary || event.button !== 0) return
+    if (!rendering || gesture.current || carried.current || feeling.current || !event.isPrimary || event.button !== 0) return
     const point = pointFromEvent(event)
     if (!point) return
     feeling.current = { id: event.pointerId, body: new BodyTouch(point, event.timeStamp), busy: false }
@@ -484,7 +508,12 @@ export function Studio({ look, tool, color, dye, decorating, clip, dispatch, onS
     stroke(point)
   }
 
+  function ownsPointer(id: number) {
+    return gesture.current?.id === id || carried.current?.id === id || feeling.current?.id === id
+  }
+
   function finish() {
+    moves.current = []
     const current = gesture.current
     if (!current) return
     const swept = current.blower?.settled() ?? []
@@ -522,7 +551,15 @@ export function Studio({ look, tool, color, dye, decorating, clip, dispatch, onS
   const dropRef = useRef(dropCarried)
   useEffect(() => { dropRef.current = dropCarried })
   useEffect(() => {
-    const release = () => { finishRef.current(); dropRef.current(null) }
+    if (!rendering) {
+      moves.current = []
+      feeling.current = null
+      finishRef.current()
+      dropRef.current(null)
+    }
+  }, [rendering])
+  useEffect(() => {
+    const release = () => { moves.current = []; feeling.current = null; finishRef.current(); dropRef.current(null) }
     const hidden = () => { if (document.visibilityState === 'hidden') release() }
     window.addEventListener('blur', release)
     document.addEventListener('visibilitychange', hidden)
@@ -553,7 +590,7 @@ export function Studio({ look, tool, color, dye, decorating, clip, dispatch, onS
     dispatch({ type })
   }
 
-  return <section className={`studio-panel tool-${tool} ${decorating ? 'decorating' : ''}`} aria-label="Interactive hair studio">
+  return <section ref={panelRef} data-rendering={rendering} data-fps={fps} className={`studio-panel tool-${tool} ${decorating ? 'decorating' : ''}`} aria-label="Interactive hair studio">
     <SalonRoom />
     <div className="studio-actions">
       <button className="round-button" title="Undo last change" aria-label="Undo last change" disabled={!canUndo} onClick={() => restore('undo')}><Icon name="undo" /></button>
@@ -561,6 +598,7 @@ export function Studio({ look, tool, color, dye, decorating, clip, dispatch, onS
     </div>
     <Capybara
       look={look}
+      graphics={graphics}
       svgRef={svgRef}
       className="studio-capy"
       data-testid="styling-canvas"
@@ -575,27 +613,26 @@ export function Studio({ look, tool, color, dye, decorating, clip, dispatch, onS
       lifted={lifted ?? undefined}
       onPointerDown={start}
       onPointerMove={(event) => {
-        if (carried.current?.id === event.pointerId) {
-          const point = pointFromEvent(event)
-          if (point) moveCarried(point, overTrash(event))
-          return
-        }
+        if (!rendering) return
+        const carrying = carried.current?.id === event.pointerId
         const styling = gesture.current?.id === event.pointerId
         const touch = feeling.current?.id === event.pointerId ? feeling.current : null
         // A mouse that let go outside the picture is only hovering now.
         if (touch && !styling && event.buttons === 0) feeling.current = null
-        if (!styling && (!touch || event.buttons === 0)) return
+        if (!carrying && !styling && (!touch || event.buttons === 0)) return
         const samples = event.nativeEvent.getCoalescedEvents?.() ?? []
+        const binned = carrying && overTrash(event)
         for (const sample of samples.length ? samples : [event]) {
           const point = pointFromEvent(sample)
           if (!point) continue
-          if (styling) stroke(point)
-          // Rubbing bare fur tickles; rubbing hair is just styling.
-          const tickled = touch?.body.move(point)
-          if (tickled && !gesture.current?.touched.size) react(tickled, true)
+          // Keep the traced path, but commit input at the selected rendering rate rather than per hardware event.
+          moves.current.push({ point, binned })
         }
+        animate()
       }}
       onPointerUp={(event) => {
+        if (!ownsPointer(event.pointerId)) return
+        flushMoves()
         const point = pointFromEvent(event)
         const poked = letGo(event.pointerId, point, event.timeStamp)
         if (carried.current?.id === event.pointerId) {
@@ -610,11 +647,15 @@ export function Studio({ look, tool, color, dye, decorating, clip, dispatch, onS
         if (poked && quiet) react(poked, false)
       }}
       onPointerCancel={(event) => {
+        if (!ownsPointer(event.pointerId)) return
+        moves.current = []
         letGo(event.pointerId, null, event.timeStamp)
         if (carried.current?.id === event.pointerId) dropCarried(null)
         if (gesture.current?.id === event.pointerId) finish()
       }}
       onLostPointerCapture={(event) => {
+        if (!ownsPointer(event.pointerId)) return
+        moves.current = []
         letGo(event.pointerId, null, event.timeStamp)
         if (carried.current?.id === event.pointerId) dropCarried(null)
         if (gesture.current?.id === event.pointerId) finish()

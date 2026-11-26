@@ -1,8 +1,9 @@
 import type { CSSProperties } from 'react'
 
-export type IconName = 'sparkles' | 'heart' | 'camera' | 'gallery' | 'undo' | 'reset' | 'sound' | 'muted' | 'close' | 'download' | 'trash' | 'arrow' | 'check' | 'brush' | 'comb' | 'snip' | 'grow' | 'curl' | 'soap' | 'wash' | 'blower' | 'color' | 'help'
+export type IconName = 'sparkles' | 'heart' | 'camera' | 'gallery' | 'undo' | 'reset' | 'sound' | 'muted' | 'close' | 'download' | 'trash' | 'arrow' | 'check' | 'brush' | 'comb' | 'snip' | 'grow' | 'curl' | 'soap' | 'wash' | 'blower' | 'color' | 'help' | 'settings'
 
 const paths: Record<IconName, React.ReactNode> = {
+  settings: <><path d="M4 6h16M4 12h16M4 18h16" /><circle cx="9" cy="6" r="2" fill="#f9f7f2" /><circle cx="16" cy="12" r="2" fill="#f9f7f2" /><circle cx="8" cy="18" r="2" fill="#f9f7f2" /></>,
   sparkles: <><path d="m12 3 2.4 6.6L21 12l-6.6 2.4L12 21l-2.4-6.6L3 12l6.6-2.4Z" /><path d="m20 2 .7 2.3L23 5l-2.3.7L20 8l-.7-2.3L17 5l2.3-.7Z" /></>,
   heart: <path d="M20.5 5.8c-2.6-2.6-6.4-1-8.5 1.5-2.1-2.5-5.9-4.1-8.5-1.5C-1 10.3 5 16 12 21c7-5 13-10.7 8.5-15.2Z" />,
   camera: <><path d="M3 7h4l2-3h6l2 3h4v13H3Z" /><circle cx="12" cy="13" r="4" /><path d="M18 10h.1" /></>,

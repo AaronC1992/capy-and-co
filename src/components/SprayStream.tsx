@@ -1,6 +1,7 @@
 import { SPRAY_RADIUS } from '../game/hairSprayer'
 import type { SprayJet } from '../game/hairSprayer'
 import { Icon } from './Icon'
+import type { GraphicsQuality } from '../game/performance'
 
 const ICON_SIZE = 54
 const ICON_SCALE = ICON_SIZE / 24
@@ -16,7 +17,7 @@ const SPLASHES = [
 const round = (value: number) => Math.round(value * 10) / 10
 
 // The water mist from the sprayer, drawn from the bottle's nozzle to the patch of hair it soaks. Local +x points at the fingertip.
-export function SprayStream({ jet, id }: { jet: SprayJet; id: string }) {
+export function SprayStream({ jet, id, graphics = 'high' }: { jet: SprayJet; id: string; graphics?: GraphicsQuality }) {
   const dx = jet.target.x - jet.nozzle.x
   const dy = jet.target.y - jet.nozzle.y
   const distance = Math.max(24, Math.hypot(dx, dy))
@@ -39,9 +40,9 @@ export function SprayStream({ jet, id }: { jet: SprayJet; id: string }) {
     <path d={cone} fill={`url(#${id}-mist)`} />
     <ellipse cx={round(distance)} cy="0" rx={round(PATCH * 0.95)} ry={round(PATCH)} fill={`url(#${id}-patch)`} />
     <g fill="none" stroke="#fff" strokeWidth="4.2" strokeLinecap="round">
-      {LANES.map((lane, index) => <path key={lane} className="spray-drops" style={{ animationDelay: `${-index * 0.07}s` }} d={`M6 ${round(lane * 2.5)}L${round(distance)} ${round(lane * PATCH * 0.8)}`} />)}
+      {LANES.filter((_, lane) => graphics === 'high' || (graphics === 'medium' ? lane % 2 === 0 : lane === 2)).map((lane, index) => <path key={lane} className="spray-drops" style={{ animationDelay: `${-index * 0.07}s` }} d={`M6 ${round(lane * 2.5)}L${round(distance)} ${round(lane * PATCH * 0.8)}`} />)}
     </g>
-    {SPLASHES.map((splash, index) => <g key={index} transform={`translate(${round(distance + splash.x * PATCH)} ${round(splash.y * PATCH)})`}>
+    {SPLASHES.slice(0, graphics === 'low' ? 0 : graphics === 'medium' ? 3 : 6).map((splash, index) => <g key={index} transform={`translate(${round(distance + splash.x * PATCH)} ${round(splash.y * PATCH)})`}>
       <circle className="spray-pop" style={{ animationDelay: `${-index * 0.13}s` }} r={2.6 + (index % 3) * 0.7} fill="#f6fdff" stroke="#8fcde0" strokeWidth=".8" />
     </g>)}
     <g transform={flip ? 'scale(1 -1)' : undefined}>

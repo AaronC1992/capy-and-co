@@ -33,6 +33,8 @@ The fantasy RPG/VR project was cancelled before implementation. The current deli
 - Git initialization, lockfile, strict TypeScript, unit tests, and static production build.
 - Public hosting on GitHub Pages, deployed automatically from `main` by a workflow that runs the tests first, with a Play now button at the top of the README.
 - No ads, accounts, purchases, analytics, remote fonts, or external artwork.
+- Automatic capability-based graphics with manual Low/Medium/High overrides, 30 FPS power-saving mode, reduced effects, batched pointer input, and hidden/offscreen rendering suspension.
+- Installable PWA with relative manifest/icons, complete-release offline caching, deferred updates, and Settings-based installation/offline status.
 
 ## Automated checks
 
@@ -41,11 +43,22 @@ Executed during implementation:
 | Check | Result |
 | --- | --- |
 | TypeScript strict checking | Passed |
-| Vitest | 304 tests passed across 19 files; exit code 0 |
+| Vitest | 318 tests passed across 21 files; exit code 0 |
 | Vite production build | Passed |
 | Local server HTTP response | 200 |
 
 Tests cover real model transitions rather than just UI labels: single-lock editing, length bounds, curl/brush behavior, color/wash behavior, multi-lock stroke undo, friend isolation, accessory/reset undo, bounded history, whole-head edits, geometry picking, fast strokes, malformed saves, inaccessible storage, snapshots, and gallery eviction. Later milestones added tests for the local brush, the blow-dryer, the gel comb, the water sprayer, hold-to-curl, cutting to bald and regrowing, the 28 outfits, dye effects, hats, glasses, headbands, and clips, sounds and reactions, the photo booth, pokes and tickles, moving worn items, makeup and lashes, and floor-length hair; each milestone section below lists what it covers.
+
+### Adaptive graphics and offline installation
+
+- New tests cover conservative capability hints, invalid/blocked settings storage, 30 FPS pacing on 60/90/120/144 Hz screens, 60 FPS mode, suspended scheduling with no hidden-time catch-up, and frame-loop reentrancy.
+- Rendering tests preserve all 65 editable strands, soap, dye, glitter dust, and wetness while verifying that Low paints less than half as many paths as High on a curled/soapy/glittered head. Standard undyed hair uses 65/130/195 hair paths in Low/Medium/High.
+- Worker tests cover complete precaching (including lazy modules), failed installation, cache isolation by scope, offline root/index/query launches, and actual PNG dimensions against manifest declarations.
+- Production Chromium checks: settings persisted across reload; a Low-mode Grow hold produced 44 hair commits in 1.5 seconds (consistent with the 30 FPS cap); a touch drag changed hair and one Undo restored it. Header touch targets measured 44 by 44 CSS pixels at a 320px viewport.
+- Scrolling the studio completely out of view suspended rendering and scrolling back resumed it. In a genuinely hidden browser page, the rendering flag was false, CSS animations were paused, and hair geometry remained unchanged.
+- Offline was tested with both local production servers stopped and the ordinary HTTP cache disabled: root and `/capy-and-co/?installed=1` launches worked, previously unopened photo booths and galleries loaded, photos could be saved, and an offline reload retained the gallery. Photo scenes still painted all 195 full-detail hair paths while the main studio used Low.
+- A second production build downloaded into a waiting worker without interrupting the active version. Settings displayed the update notice; navigating away and reopening activated the new version, retained preferences, and removed only the old game cache.
+- Manifest, start URL, worker scope, and 192/512px PNGs resolved correctly under the GitHub Pages-style subpath. OS installation prompts and physical iPad/Android frame rates still require real-device testing.
 
 ### Continuous-touch refinement
 
@@ -450,7 +463,7 @@ Use a current Chrome/Edge desktop browser, Android Chrome, and iPad/iPhone Safar
 
 ## Known limitations and next milestone
 
-Hosted publicly on GitHub Pages at https://aaronc1992.github.io/capy-and-co/ (see "GitHub Pages deployment" above). There is no native installer, service worker/offline launch, or cloud gallery. Browser storage is per origin and can be cleared by the device, so pictures saved on one device or browser do not appear on another. Hair consists of stylized editable locks, not fluid strand simulation; outfits use predefined positions, while hats, glasses, headbands, clips, and stickers can be placed anywhere.
+Hosted publicly on GitHub Pages at https://aaronc1992.github.io/capy-and-co/ (see "GitHub Pages deployment" above). The source now supports PWA installation and offline launch after a complete initial download; there is no native installer or cloud gallery. Browser storage is per origin and can be cleared by the device, so pictures saved on one device or browser do not appear on another. Hair consists of stylized editable locks, not fluid strand simulation; outfits use predefined positions, while hats, glasses, headbands, clips, and stickers can be placed anywhere.
 
 Limitations of the newest features:
 

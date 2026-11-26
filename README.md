@@ -6,7 +6,7 @@
 
 <p align="center">
   <a href="https://aaronc1992.github.io/capy-and-co/"><strong>https://aaronc1992.github.io/capy-and-co/</strong></a><br />
-  Free in any modern browser on desktop, phone, or tablet. Nothing to install.
+  Free in any modern browser on desktop, phone, or tablet. Play in your browser or install for offline play.
 </p>
 
 # Capy & Co.
@@ -54,6 +54,24 @@ The game is published at **https://aaronc1992.github.io/capy-and-co/**. `.github
 
 Pages must be set to **Settings → Pages → Source: GitHub Actions**. Saved pictures and hairstyles live in each visitor's own browser storage, so nothing is shared between people or devices.
 
+## Performance, installation, and offline play
+
+Open **Settings** in the header to choose **Auto**, **Low**, **Medium**, or **High** graphics. Auto uses the processor, memory, and data-saving hints the browser shares; missing hints select Medium. Low is chosen for at most four reported processor threads, at most 4 GB of reported memory, or data-saving mode. High requires at least eight threads and 8 GB of memory. These are estimates, not hardware benchmarks; you can always override them.
+
+- **Low:** up to 30 FPS, one main hair stroke instead of three, fewer bubbles and spray effects, no decorative animation, and reduced shadows. All 65 strands, tools, colors, soap, outfits, and saved styles remain available.
+- **Medium:** up to 60 FPS with fewer highlights and particles.
+- **High:** up to 60 FPS with the full artwork.
+- **30 FPS mode** can also limit Medium or High to save power. It disables CSS animation so effects do not keep painting at the screen's full refresh rate.
+- Pointer movements are processed together on rendering frames. Growth, curling, and drying still use elapsed time rather than frame counts. The existing safety cap after a long stall is unchanged.
+- The studio stops rendering when offscreen, behind a dialog, or in a hidden tab. Active gestures end on hiding so tools do not keep running in the background.
+- Small friend portraits use lightweight static artwork. Photo booth/gallery code loads on demand, and offscreen gallery cards and dress-up grids skip painting where supported. Exported photos retain full detail regardless of graphics settings.
+
+To install, visit the game **online once**, open Settings, and wait for **Ready to play offline**. Use **Install game** when offered, or the browser's install menu. On iPhone/iPad, open Safari and use **Share → Add to Home Screen**. Browser support varies; the normal web game remains available without installation.
+
+The production build caches the complete game, including images and unopened photo booth/gallery screens. Offline play needs HTTPS or localhost; plain HTTP on a Wi-Fi address and the Vite development server do not enable offline installation. Test with `npm run build` then `npm run preview`. The manifest, icons, and worker use relative paths for GitHub Pages.
+
+Updates download in the background and wait until every game tab/window is closed. Settings reports when an update is ready; close and reopen the game to apply it without interrupting a hairstyle. Browser storage pressure or clearing site data can remove cached files and saves; revisit online if offline launch stops working. There is no cloud backup.
+
 ## How to play
 
 - Choose a capybara. Each friend keeps a separate hairstyle.
@@ -81,7 +99,7 @@ On narrow screens, scroll between the studio and the tools. Scroll outside the c
 
 ## Saving and privacy
 
-The current looks (hair, outfit, hat, glasses, headband and wherever they were moved to, lashes, makeup, and clips), selected friend, sound preference, and the 12 newest pictures (with their photo booth backgrounds, frames, faces, and stickers) are saved in this browser's local storage. Undo history is session-only and resets when changing friends or reloading. Data does not leave the device.
+The current looks (hair, outfit, hat, glasses, headband and wherever they were moved to, lashes, makeup, and clips), selected friend, sound preference, graphics settings, and the 12 newest pictures (with their photo booth backgrounds, frames, faces, and stickers) are saved in this browser's local storage. Graphics settings use a separate key and do not change existing saves. Undo history is session-only and resets when changing friends or reloading. Data does not leave the device.
 
 Older 13-lock saves and gallery pictures are automatically expanded into 65 finer strands, retaining their colors, lengths, styling, accessories, and soap. Dryness and blown shapes are saved too. Saves from before outfits existed open in the cozy cape, and saves from when curls were simply on or off open with moderately curly hair that you can curl tighter. Saves from when each friend wore a single accessory keep it: the crown becomes a hat, and the bow, flower, cherries, or star becomes a clip in the same spot. Pictures taken before the photo booth show the plain studio background. Saves from before makeup open with a bare face.
 
@@ -107,6 +125,9 @@ src/
     SalonRoom.tsx          Original illustrated salon background
     Studio.tsx             Mouse/touch/pen strokes and keyboard interaction
     useHairMotion.ts       Frame-scheduled animation and reduced-motion handling
+    usePerformance.ts      Capability-based settings and page/viewport visibility
+    Settings.tsx           Graphics, power-saving, install, and offline status
+    usePwa.ts              Production worker registration and install prompt
     AirStream.tsx          The visible stream of air that follows the dryer
     SprayStream.tsx        The spray bottle and mist that follow the sprayer
     Toolbox.tsx            Tool, color, dye style, and dress-up menus
@@ -139,6 +160,12 @@ src/
     storage.ts             Versioned save validation and local persistence
     exportPhoto.ts         Self-contained SVG to PNG export of a booth picture and its caption
     audio.ts               Lazy Web Audio lifecycle and each tool's synthesized sound
+    performance.ts         Graphics selection, preference validation, and frame pacing
+pwa/
+  plugin.ts                Build-time versioned precache generation
+  service-worker.js        Scope-isolated, complete-release offline caching
+public/
+  manifest.webmanifest     Install metadata and relative icon/start URLs
 docs/
   ARCHITECTURE.md
   DEVELOPMENT_STATUS.md
@@ -155,12 +182,12 @@ npm test
 npm run build
 ```
 
-304 automated tests in 19 files cover initialization, rendering, fine-strand editing, the head-curve hairline and scalp cover, the local per-point brush (locality, fixed roots, no stretching, sideways folding, tip lag and swing, bounded slip, frame-rate independence, saved poses), the gel comb (holding, laying hair along the traced line, the untouched hair before the touch, curls and bald scalp), the directional blow-dryer (swipe aiming, the wind cone and its edges, per-segment bending that keeps strand lengths, head-on folding, flapping, linear drying, frame-rate independence, stall handling, saved poses), the water sprayer and hanging wet hair (where the mist lands, soaking, rinsing, shaved scalp, hanging with fixed roots and unchanged lengths, staying out of the face, throttled pose updates that still settle exactly), hold-to-curl timing (including frame-rate independence), efficient strand painting, soap/rinsing, wetness, position-based cutting (including brushed and bent hair and cutting to bald), hold-to-grow and regrowing a bare scalp, floor-length hair (falling to the floor without leaving the picture, growing only at the tip, smooth drawing, cutting it where the scissors cross, and soaked hair lying along the floor), the 28 outfits (art, selection, per-friend looks, undo/reset), dye modes, rainbow, and glitter (painting, placing the sparkles along the lock, rinsing, shaving, and the scalp color), hats, glasses, headbands, and clips (placing anywhere, riding on the hair, dragging off, the 12-clip limit, the hat on short and long hair, moving a worn item and where it may stay), fake eyelashes and makeup (every style on every face, blinking along, saving, and undo), per-tool sounds and their spacing, the capybara's reactions (including pokes and tickles: the touch spots, a poke versus a press or a slide, rubbing versus dragging through, and each reaction's face), the floating halo, the photo booth (scenes, sticker placing, dragging, and peeling, drawing order, picture validation), gesture undo, character isolation, deformed-hair picking, older-save migration (including single accessories becoming hats and clips), shape, outfit, accessory, and scene validation, storage failure handling, and gallery snapshots.
+318 automated tests in 21 files cover initialization, rendering, fine-strand editing, the head-curve hairline and scalp cover, the local per-point brush (locality, fixed roots, no stretching, sideways folding, tip lag and swing, bounded slip, frame-rate independence, saved poses), the gel comb (holding, laying hair along the traced line, the untouched hair before the touch, curls and bald scalp), the directional blow-dryer (swipe aiming, the wind cone and its edges, per-segment bending that keeps strand lengths, head-on folding, flapping, linear drying, frame-rate independence, stall handling, saved poses), the water sprayer and hanging wet hair (where the mist lands, soaking, rinsing, shaved scalp, hanging with fixed roots and unchanged lengths, staying out of the face, throttled pose updates that still settle exactly), hold-to-curl timing (including frame-rate independence), efficient strand painting, soap/rinsing, wetness, position-based cutting (including brushed and bent hair and cutting to bald), hold-to-grow and regrowing a bare scalp, floor-length hair (falling to the floor without leaving the picture, growing only at the tip, smooth drawing, cutting it where the scissors cross, and soaked hair lying along the floor), the 28 outfits (art, selection, per-friend looks, undo/reset), dye modes, rainbow, and glitter (painting, placing the sparkles along the lock, rinsing, shaving, and the scalp color), hats, glasses, headbands, and clips (placing anywhere, riding on the hair, dragging off, the 12-clip limit, the hat on short and long hair, moving a worn item and where it may stay), fake eyelashes and makeup (every style on every face, blinking along, saving, and undo), per-tool sounds and their spacing, the capybara's reactions (including pokes and tickles: the touch spots, a poke versus a press or a slide, rubbing versus dragging through, and each reaction's face), the floating halo, the photo booth (scenes, sticker placing, dragging, and peeling, drawing order, picture validation), gesture undo, character isolation, deformed-hair picking, older-save migration (including single accessories becoming hats and clips), shape, outfit, accessory, and scene validation, storage failure handling, and gallery snapshots. Performance/PWA tests also verify capability fallbacks, corrupt graphics preferences, 30/60 FPS pacing on different refresh rates, visibility suspension without catch-up, reduced SVG painting with unchanged styles, complete-release caching, cache-scope isolation, offline navigation, and install icon dimensions.
 
 Browser verification and the real-device checklist are recorded in [Development status](docs/DEVELOPMENT_STATUS.md). See [Architecture](docs/ARCHITECTURE.md) for the interaction and persistence design.
 
 ## Current boundaries
 
-This is a playable 2D prototype, not a native app. Hair is a set of bendable strands driven by a simple spring model, not a full physical simulation, so strands do not collide or tangle with each other. Outfits, hats, glasses, and headbands have fixed placements; only clips and stickers can be put anywhere. A head where every strand is curly and the blow-dryer is sweeping across it is the heaviest thing the game draws; it animates noticeably slower than straight hair in a desktop browser, and brushing, combing, or spraying the curls out brings the speed back. There is no offline installation/service worker, cloud gallery, or multiplayer. Actual iPad/Android hardware testing is still needed before calling it device-certified.
+This is an installable 2D web prototype, not a native app. Hair is a set of bendable strands driven by a simple spring model, not a full physical simulation, so strands do not collide or tangle with each other. A head where every strand is curly and the blow-dryer is sweeping across it is the heaviest thing the game draws; Low graphics reduces painting work, but cannot guarantee 30 FPS on every device or hairstyle. There is no cloud gallery or multiplayer. Actual iPad/Android hardware testing is still needed before calling it device-certified.
 
 Suggested next milestone: try the live game with the intended player on a real tablet, then adjust tool sizing and feedback from that playtest.

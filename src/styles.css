@@ -151,6 +151,9 @@ nav { display: flex; align-items: center; gap: 22px; }
 .gallery-note { font-size: 12px; color: #868b7b; line-height: 1.7; margin: 18px 0 22px; }
 .gallery-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 15px; }
 .photo-card { background: #fff; border: 1px solid #e6e4d8; border-radius: 14px; padding: 8px; overflow: hidden; }
+.photo-card { content-visibility: auto; contain-intrinsic-size: auto 340px; }
+.photo-card *, .friend-avatar * { animation: none !important; }
+.wear-grid, .outfit-grid { content-visibility: auto; contain-intrinsic-size: auto 300px; }
 .photo-art { border-radius: 9px; overflow: hidden; }
 .photo-art > svg { display: block; width: 100%; height: auto; }
 .photo-info { padding: 12px 5px 5px; }
@@ -189,6 +192,14 @@ nav { display: flex; align-items: center; gap: 22px; }
 .sticker.lifted { cursor: grabbing; }
 .sticker.away { opacity: .4; }
 .help-content { padding-top: 26px; }
+.settings-content { display: grid; gap: 24px; padding-top: 24px; }
+.settings-content section { display: grid; gap: 12px; }
+.settings-content h3 { font-size: 16px; }
+.settings-content p { font-size: 13px; line-height: 1.7; }
+.settings-content label { font-size: 14px; }
+.settings-content select { font: inherit; color: inherit; background: #fffefa; border: 1px solid #a0ad94; border-radius: 9px; min-height: 44px; padding: 8px 12px; width: 100%; }
+.check-setting { display: flex; align-items: center; gap: 12px; min-height: 44px; }
+.check-setting input { width: 22px; height: 22px; accent-color: #647956; }
 .help-step { display: flex; gap: 18px; margin-bottom: 23px; }
 .help-step > span { display: grid; place-items: center; width: 36px; height: 36px; flex-shrink: 0; background: #e7eddd; border-radius: 50%; font-family: Georgia, serif; font-size: 19px; color: #798c68; }
 .help-step h3 { font-size: 15px; margin-bottom: 6px; }
@@ -305,6 +316,8 @@ nav { display: flex; align-items: center; gap: 22px; }
   .nav-button { font-size: 11px; gap: 5px; padding: 0 3px; }
   .sound-button { width: 40px; justify-content: center; }
   .sound-button span, .nav-divider { display: none; }
+  .settings-button span, .gallery-button span { display: none; }
+  .nav-button { min-width: 44px; justify-content: center; }
   .main-shell { padding: 10px 12px 16px; }
   .salon-layout { grid-template-columns: 1fr; gap: 12px; }
   .friend-picker { gap: 8px; margin-bottom: 8px; }
@@ -363,6 +376,7 @@ nav { display: flex; align-items: center; gap: 22px; }
 @media (max-width: 365px) {
   .main-shell { padding-inline: 12px; }
   .brand { font-size: 22px; gap: 5px; }
+  .brand-mark { display: none; }
   .brand small { font-size: 5px; }
   .nav-button:not(.sound-button) { font-size: 10px; }
   .friend-card { gap: 4px; padding-inline: 3px; }
@@ -375,7 +389,16 @@ nav { display: flex; align-items: center; gap: 22px; }
 @media (pointer: coarse) {
   .round-button, .round-button.small, .studio-actions .round-button { min-width: 44px; min-height: 44px; }
   .all-hair-button { min-height: 44px; }
+  .sound-button, .nav-button { min-width: 44px; }
+  .tool-tabs button, .delete-confirm button { min-height: 44px; }
+  .booth-picture > svg { user-select: none; -webkit-user-select: none; }
 }
+[data-graphics="low"] .studio-panel, [data-graphics="low"] .toolbox { box-shadow: none; }
+[data-graphics="low"] .modal::backdrop { backdrop-filter: none; }
+[data-graphics="low"] .studio-capy .lifted { filter: none; }
+/* CSS effects would otherwise keep painting at the display refresh rate in 30 FPS mode. */
+[data-low-power="true"] *, [data-low-power="true"] *::before, [data-low-power="true"] *::after { animation: none !important; transition: none !important; }
+[data-rendering="false"] *, [data-game-hidden="true"] *, [data-game-hidden="true"] *::before, [data-game-hidden="true"] *::after { animation-play-state: paused !important; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }

@@ -22,12 +22,14 @@ import { BlushArt, EyeshadowArt, LashArt, LipstickArt } from './Makeup'
 import type { Lid } from './Makeup'
 import { OutfitBack, OutfitFront, Paws } from './Outfit'
 import { SprayStream } from './SprayStream'
+import type { GraphicsQuality } from '../game/performance'
 
 interface CapybaraProps extends SVGProps<SVGSVGElement> {
   look: Look
   svgRef?: Ref<SVGSVGElement>
   mood?: Mood
   portrait?: boolean
+  graphics?: GraphicsQuality
   hairOffsets?: HairOffsets
   airflow?: AirJet
   spray?: SprayJet
@@ -41,6 +43,7 @@ interface StrandProps {
   strand: Strand
   index: number
   offsets?: HairShape
+  graphics: GraphicsQuality
 }
 
 // How the capybara feels about what's happening to its hair right now, or about being poked or tickled.
@@ -50,12 +53,12 @@ const WET_TINT = '#35546a'
 const round1 = (value: number) => Math.round(value * 10) / 10
 
 // Every strand is its own memoized piece: a frame only redraws the strands whose style or motion changed.
-const SoapStrand = memo(function SoapStrand({ strand, index, offsets }: StrandProps) {
+const SoapStrand = memo(function SoapStrand({ strand, index, offsets, graphics }: StrandProps) {
   const { line, stride, path } = drawStrand(strand, index, strandPoints(strand, index, offsets))
   const tip = line[line.length - 1]
   return <g data-soap-strand={index}>
     <path d={path} fill="none" stroke="#f2fffb" strokeWidth="9" strokeLinecap="round" opacity=".8" />
-    {[4, 10, 16, 22].map((step, bubble) => {
+    {(graphics === 'low' ? [] : graphics === 'medium' ? [10, 22] : [4, 10, 16, 22]).map((step, bubble) => {
       const point = line[step * stride]
       const x = point.x + (bubble % 2 ? 3 : -3)
       const radius = 3.5 + (index + bubble) % 4 * 0.6
@@ -64,13 +67,13 @@ const SoapStrand = memo(function SoapStrand({ strand, index, offsets }: StrandPr
         <path d={`M${x - radius * 0.48} ${point.y - radius * 0.15}q0 ${-radius * 0.48} ${radius * 0.48} ${-radius * 0.48}`} fill="none" stroke="#fff" strokeWidth="1.2" strokeLinecap="round" />
       </g>
     })}
-    <circle cx={tip.x + (index % 2 ? 7 : -7)} cy={tip.y - 6} r="2.5" fill="#effcff" fillOpacity=".8" stroke="#b8d9da" strokeWidth=".65" />
+    {graphics !== 'low' && <circle cx={tip.x + (index % 2 ? 7 : -7)} cy={tip.y - 6} r="2.5" fill="#effcff" fillOpacity=".8" stroke="#b8d9da" strokeWidth=".65" />}
   </g>
 })
 
-function SoapFoam({ look, offsets }: { look: Look; offsets?: HairOffsets }) {
+function SoapFoam({ look, offsets, graphics }: { look: Look; offsets?: HairOffsets; graphics: GraphicsQuality }) {
   return <g className="soap-foam" pointerEvents="none" aria-hidden="true">
-    {look.hair.map((strand, index) => strand.soapy ? <SoapStrand key={index} strand={strand} index={index} offsets={offsets?.[index]} /> : null)}
+    {look.hair.map((strand, index) => strand.soapy ? <SoapStrand key={index} strand={strand} index={index} offsets={offsets?.[index]} graphics={graphics} /> : null)}
   </g>
 }
 
@@ -88,18 +91,18 @@ function DyeGradient({ id, line, stops, wet }: { id: string; line: readonly Poin
 
 const SPARKLE = 'M0-4.6 1.1-1.1 4.6 0 1.1 1.1 0 4.6-1.1 1.1-4.6 0-1.1-1.1Z'
 
-const HairStrand = memo(function HairStrand({ strand, index, offsets, paintId }: StrandProps & { paintId: string }) {
+const HairStrand = memo(function HairStrand({ strand, index, offsets, paintId, graphics }: StrandProps & { paintId: string }) {
   const { line, path } = drawStrand(strand, index, strandPoints(strand, index, offsets))
   const wetness = strand.wetness ?? 0
-  const tip = wetness > 0 && index % 4 === 0 ? line[line.length - 1] : null
+  const tip = graphics !== 'low' && wetness > 0 && index % (graphics === 'medium' ? 8 : 4) === 0 ? line[line.length - 1] : null
   const stops = dyeStops(strand)
-  const sparkles = strand.glitter ? [Math.floor(line.length * 0.42), Math.floor(line.length * 0.8)].map((at) => line[Math.min(line.length - 1, at)]) : []
+  const sparkles = strand.glitter && graphics !== 'low' ? (graphics === 'medium' ? [0.8] : [0.42, 0.8]).map((at) => line[Math.min(line.length - 1, Math.floor(line.length * at))]) : []
   // Wet hair paints no extra strokes: the cool tint is mixed into the color and the gloss strengthens the highlight.
   return <g data-strand={index} data-wetness={wetness}>
     {stops && <DyeGradient id={paintId} line={line} stops={stops} wet={wetness} />}
-    <path d={path} stroke="#6a4b3a" strokeOpacity=".48" strokeWidth="6.4" />
+    {graphics !== 'low' && <path d={path} stroke="#6a4b3a" strokeOpacity=".48" strokeWidth="6.4" />}
     <path d={path} stroke={stops ? `url(#${paintId})` : wetness > 0 ? mixColor(strand.color, WET_TINT, wetness * 0.4) : strand.color} strokeWidth="5.2" />
-    <path d={path} stroke={wetness > 0 ? '#e9f8ff' : '#fff8e9'} strokeOpacity={Math.round((0.35 + wetness * 0.4) * 100) / 100} strokeWidth={Math.round((1 + wetness * 0.6) * 10) / 10} transform="translate(-1 -.3)" />
+    {graphics === 'high' && <path d={path} stroke={wetness > 0 ? '#e9f8ff' : '#fff8e9'} strokeOpacity={Math.round((0.35 + wetness * 0.4) * 100) / 100} strokeWidth={Math.round((1 + wetness * 0.6) * 10) / 10} transform="translate(-1 -.3)" />}
     {strand.glitter && <path data-glitter-dust={index} d={path} stroke="#fffbe8" strokeWidth="2.6" strokeDasharray=".1 7.5" strokeDashoffset={index % 5 * 1.5} />}
     {/* The twinkle animates the sparkle's own transform, so it is placed by a group around it instead of moved itself. */}
     {sparkles.map((point, sparkle) => <g key={sparkle} transform={`translate(${round1(point.x + (sparkle ? -2 : 2))} ${round1(point.y)})`}>
@@ -238,7 +241,7 @@ function ReactionArt({ reaction }: { reaction: Reaction }) {
   </g>
 }
 
-export const Capybara = memo(function Capybara({ look, svgRef, mood = 'calm', portrait = false, hairOffsets, airflow, spray, lifted, beat = 0, className, ...props }: CapybaraProps) {
+export const Capybara = memo(function Capybara({ look, svgRef, mood = 'calm', portrait = false, graphics = 'high', hairOffsets, airflow, spray, lifted, beat = 0, className, ...props }: CapybaraProps) {
   const id = useId().replace(/:/g, '')
   const friend = CHARACTERS.find((c) => c.id === look.character)!
   const ear = <>
@@ -278,13 +281,13 @@ export const Capybara = memo(function Capybara({ look, svgRef, mood = 'calm', po
     <ScalpCap look={look} id={id} />
     {/* Mitred joins paint far faster than round ones and look the same on hair this smooth. */}
     <g className="hair" fill="none" strokeLinecap="round" strokeLinejoin="miter">
-      {look.hair.map((strand, index) => isBald(strand.length) ? null : <HairStrand key={index} strand={strand} index={index} offsets={hairOffsets?.[index]} paintId={`${id}-dye-${index}`} />)}
+      {look.hair.map((strand, index) => isBald(strand.length) ? null : <HairStrand key={index} strand={strand} index={index} offsets={hairOffsets?.[index]} paintId={`${id}-dye-${index}`} graphics={graphics} />)}
     </g>
-    <SoapFoam look={look} offsets={hairOffsets} />
+    <SoapFoam look={look} offsets={hairOffsets} graphics={graphics} />
     <HairWear look={look} offsets={hairOffsets} lifted={lifted} />
-    {airflow && <AirStream jet={airflow} id={id} />}
-    {spray && <SprayStream jet={spray} id={id} />}
-    {mood === 'shake' && <g className="shake-drops" fill="#cdeef8" stroke="#5f9fbd" strokeWidth="2">
+    {airflow && <AirStream jet={airflow} id={id} graphics={graphics} />}
+    {spray && <SprayStream jet={spray} id={id} graphics={graphics} />}
+    {mood === 'shake' && graphics !== 'low' && <g className="shake-drops" fill="#cdeef8" stroke="#5f9fbd" strokeWidth="2">
       {DROPS.map(([x, y, turn]) => <path key={x} d="M0-13q10 13 0 20q-10-7 0-20Z" transform={`translate(${x} ${y}) rotate(${turn})`} />)}
     </g>}
     {/* A new poke (`beat`) draws the stars, puffs and speech bubble afresh, so they pop again. */}

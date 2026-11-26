@@ -1,6 +1,7 @@
 import { coneHalfWidth, WIND_RANGE } from '../game/hairWind'
 import type { AirJet } from '../game/hairWind'
 import { Icon } from './Icon'
+import type { GraphicsQuality } from '../game/performance'
 
 const REACH = WIND_RANGE * 0.9
 // The painted stream is a little narrower than the air that bends hair, so hair at its edge still moves.
@@ -25,7 +26,7 @@ const LANE_PATHS = LANES.map((lane) => {
 })
 
 // The air from the dryer, drawn along the direction it blows. Local +x is the wind direction.
-export function AirStream({ jet, id }: { jet: AirJet; id: string }) {
+export function AirStream({ jet, id, graphics = 'high' }: { jet: AirJet; id: string; graphics?: GraphicsQuality }) {
   const angle = Math.atan2(jet.direction.y, jet.direction.x) * 180 / Math.PI
   // Blowing leftward turns the icon over, so mirror it to keep the handle pointing down.
   const flip = jet.direction.x < 0
@@ -38,7 +39,7 @@ export function AirStream({ jet, id }: { jet: AirJet; id: string }) {
     </defs>
     <path d={CONE} fill={`url(#${id}-air)`} />
     <g fill="none" stroke="#fff" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round">
-      {LANE_PATHS.map((path, lane) => <path key={LANES[lane]} className="air-stream" d={path} />)}
+      {LANE_PATHS.filter((_, lane) => graphics === 'high' || (graphics === 'medium' ? lane % 2 === 0 : lane === 2)).map((path) => <path key={path} className="air-stream" d={path} />)}
     </g>
     <g transform={flip ? 'scale(1 -1)' : undefined}>
       <g transform={`translate(${round(MOUTH_X - 21 * ICON_SCALE)} ${round(-8.5 * ICON_SCALE)})`}><Icon name="blower" size={ICON_SIZE} /></g>

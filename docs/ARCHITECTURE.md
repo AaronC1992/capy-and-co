@@ -31,6 +31,14 @@ Each look contains 65 independently editable strands, one outfit, a hat, glasses
 
 One active pointer is captured until release, cancellation, or lost capture; blur and document hiding also release it. Secondary touches are ignored. Coalesced pointer samples are consumed when available. For the brush, a strand is grabbed only where the finger's swept segment actually touches it, and stays grabbed for the gesture while the finger moves it (see the stick/slip rule below). Starting a new tool or changing friends clears transient motion and any active growth.
 
+Pointer moves are queued and processed together on the next permitted animation frame; pointer release drains the remaining samples before committing the gesture. Secondary pointer cancellation cannot clear the primary pointer's queued path. `FrameLoop` in `game/performance.ts` caps work at 30 or 60 FPS independently of screen refresh rate. It sleeps at rest and cancels scheduled frames when the studio is offscreen, a dialog covers it, or the document is hidden. Resuming resets the clock instead of integrating hidden time. CSS effects pause too; 30 FPS mode disables them so they cannot bypass the frame cap.
+
+### Graphics and loading
+
+`useGraphics` keeps Auto/Low/Medium/High and the optional 30 FPS limit under the separate `capy-and-co-graphics` storage key. Auto classifies available CPU/memory/data-saving hints conservatively; the settings UI explains the approximation and permits overrides. Invalid or inaccessible settings produce an explicit warning without touching the game-save envelope.
+
+The quality prop affects only artwork: all 65 strands and their picking geometry remain intact. Low removes hair outlines/highlights and extra bubble/glitter/drop particles; Medium keeps outlines and a reduced particle set; High preserves the original drawing. Small friend portraits are memoized, deferred locally, static, and low-detail. Photo booth/gallery modules load lazily; CSS `content-visibility` skips offscreen gallery/grid painting. Photo scenes and exports always use full-detail artwork.
+
 ### Brush model
 
 `hairBrush.ts` holds the pure maths and `hairMotion.ts` the per-strand state.
@@ -213,6 +221,12 @@ Picture export clones a gallery card's `PhotoScene` (drawn with `PLAIN_SCENE` fo
 
 ## UI and lifecycle
 
-The page is just the game: a slim header (logo, sound, My gallery, and How to play) over the friend picker, studio, and toolbox, with no hero banner, captions, or footer. The layout uses a two-column studio/toolbox at desktop and tablet widths, and a stacked touch layout on phones. Controls have accessible names, pressed/selected states, focus styling, and coarse-pointer sizing. Native dialogs contain keyboard focus, restore it on close, and have explicit Escape handling. Reduced-motion preferences turn off every CSS animation and transition, including blinking, mood wiggles, touch reactions, the floating halo, glitter twinkles, and the booth flash.
+The page is just the game: a slim header (logo, sound, My gallery, Settings, and How to play) over the friend picker, studio, and toolbox, with no hero banner, captions, or footer. The layout uses a two-column studio/toolbox at desktop and tablet widths, and a stacked touch layout on phones. Controls have accessible names, pressed/selected states, focus styling, and coarse-pointer sizing. Header buttons and tool tabs have 44px touch targets. Native dialogs contain keyboard focus, restore it on close, and have explicit Escape handling. Reduced-motion preferences turn off every CSS animation and transition, including blinking, mood wiggles, touch reactions, the floating halo, glitter twinkles, and the booth flash.
 
-`main.tsx` mounts the app under React StrictMode and a render error boundary. It does not register a service worker. Production consists entirely of static files, built with relative asset URLs (`base: './'`) and published to GitHub Pages by `.github/workflows/deploy.yml`.
+`main.tsx` mounts the app under React StrictMode and a render error boundary. Production consists entirely of static files, built with relative asset URLs (`base: './'`) and published to GitHub Pages by `.github/workflows/deploy.yml`.
+
+### Offline installation
+
+The build-only `pwa/plugin.ts` hashes the emitted shell/chunks, public assets, and worker template and emits `sw.js` with an exact precache list. `usePwa` registers it only in production on a secure origin. The manifest uses relative scope/start/icon URLs; PNG icons are rasterizations of the original favicon with maskable-safe padding.
+
+The worker installs only after the entire shell, CSS, JS (including lazy screens), and public assets download successfully. It serves that release cache-first so old HTML cannot mix with newly deployed chunks. It does not call `skipWaiting`: an update waits for all existing clients to close before activation. Activation removes only this scope's old game caches, never other applications' caches or local-storage saves. Root/index navigation, including query-string launches, shares the cached shell; unknown paths, non-GET requests, and other origins are left to the browser. Settings exposes offline readiness, installation help, errors, and waiting-update status.

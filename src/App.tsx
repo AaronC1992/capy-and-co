@@ -1,6 +1,6 @@
-import { useEffect, useReducer, useRef, useState } from 'react'
+import { lazy, memo, Suspense, useDeferredValue, useEffect, useReducer, useRef, useState } from 'react'
 import { CHARACTERS, salonReducer } from './game/model'
-import type { ClipKind, DyeMode, Tool } from './game/model'
+import type { ClipKind, DyeMode, Look, Tool } from './game/model'
 import { addPhoto, loadGame, saveGame } from './game/storage'
 import type { StoragePort } from './game/storage'
 import { SalonAudio } from './game/audio'
@@ -12,17 +12,28 @@ import { Studio } from './components/Studio'
 import { Toolbox } from './components/Toolbox'
 import type { Tab } from './components/Toolbox'
 import { Modal } from './components/Modal'
-import { Gallery } from './components/Gallery'
-import { PhotoBooth } from './components/PhotoBooth'
+import { Settings } from './components/Settings'
+import { useGraphics, usePageVisible } from './components/usePerformance'
+import { usePwa } from './components/usePwa'
 
-const MODAL_TITLES = { gallery: 'A gallery of good hair days.', help: 'Small paws. Endless possibilities.', booth: 'Say capy!' }
+const Gallery = lazy(() => import('./components/Gallery').then((module) => ({ default: module.Gallery })))
+const PhotoBooth = lazy(() => import('./components/PhotoBooth').then((module) => ({ default: module.PhotoBooth })))
+const MODAL_TITLES = { gallery: 'A gallery of good hair days.', help: 'Small paws. Endless possibilities.', booth: 'Say capy!', settings: 'Make yourself comfortable.' }
 
 const browserStorage: StoragePort = {
   getItem: (key) => localStorage.getItem(key),
   setItem: (key, value) => localStorage.setItem(key, value),
 }
 
+const FriendPortrait = memo(function FriendPortrait({ look }: { look: Look }) {
+  const preview = useDeferredValue(look)
+  return <Capybara look={preview} portrait graphics="low" aria-hidden="true" />
+})
+
 export default function App() {
+  const graphics = useGraphics(browserStorage)
+  const visible = usePageVisible()
+  const pwa = usePwa()
   const [initial] = useState(() => loadGame(browserStorage))
   const [state, dispatch] = useReducer(salonReducer, { active: initial.data.active, looks: initial.data.looks, history: [] })
   const [photos, setPhotos] = useState(initial.data.photos)
@@ -97,13 +108,14 @@ export default function App() {
     notify('Picture added to your gallery!')
   }
 
-  return <>
+  return <div className="game" data-graphics={graphics.quality} data-low-power={graphics.fps === 30}>
     <header className="site-header">
       <a className="brand" href="./" aria-label="Capy and Co home"><span className="brand-mark"><svg viewBox="0 0 48 48" fill="none" aria-hidden="true"><path d="M9 20C1 7 15 5 17 15m14 0C35 4 47 9 40 21" fill="#c6a77c" stroke="#56644c" strokeWidth="2" /><rect x="8" y="14" width="33" height="28" rx="12" fill="#dbbc93" stroke="#56644c" strokeWidth="2" /><path d="M16 29h17v8H16Z" fill="#ecd4ad" /><path d="M17 25h.1m15 0h.1m-12 7h.1m7 0h.1m-4 4h3" stroke="#56644c" strokeWidth="3" strokeLinecap="round" /><path d="M19 15c-5-8 4-11 5-4 1-9 10-7 6 2" fill="#99af8a" stroke="#56644c" strokeWidth="2" /></svg></span><span>capy <span className="brand-amp">&</span> co<span className="brand-period">.</span><small>THE HAPPY LITTLE HAIR STUDIO</small></span></a>
       <nav aria-label="Studio navigation">
         <button className="nav-button sound-button" onClick={toggleSound} aria-label={sound ? 'Turn sound off' : 'Turn sound on'} aria-pressed={sound}><Icon name={sound ? 'sound' : 'muted'} size={20} /><span>Sound {sound ? 'on' : 'off'}</span></button>
         <span className="nav-divider" />
-        <button className="nav-button" onClick={() => setModal('gallery')}><Icon name="gallery" size={20} /><span>My gallery</span>{photos.length > 0 && <span className="gallery-count">{photos.length}</span>}</button>
+        <button className="nav-button gallery-button" aria-label="My gallery" onClick={() => setModal('gallery')}><Icon name="gallery" size={20} /><span>My gallery</span>{photos.length > 0 && <span className="gallery-count">{photos.length}</span>}</button>
+        <button className="nav-button settings-button" onClick={() => setModal('settings')} aria-label="Settings and install"><Icon name="settings" size={20} /><span>Settings</span></button>
         <button className="help-button" onClick={() => setModal('help')} aria-label="How to play"><Icon name="help" size={23} /></button>
       </nav>
     </header>
@@ -113,20 +125,21 @@ export default function App() {
         <div className="play-column">
           <div className="friend-picker" role="group" aria-label="Choose your capybara">
             {CHARACTERS.map((friend) => <button key={friend.id} className={`friend-card ${state.active === friend.id ? 'active' : ''}`} aria-pressed={state.active === friend.id} aria-label={`Style ${friend.name}`} onClick={() => { dispatch({ type: 'select', character: friend.id }); playSound() }}>
-              <span className="friend-avatar" style={{ background: friend.backdrop }}><Capybara look={state.looks[friend.id]} portrait aria-hidden="true" /></span>
+              <span className="friend-avatar" style={{ background: friend.backdrop }}><FriendPortrait look={state.looks[friend.id]} /></span>
               <span className="friend-copy"><strong>{friend.name}</strong><small>{friend.personality}</small></span>
               <span className="friend-check">{state.active === friend.id && <Icon name="check" size={12} />}</span>
             </button>)}
           </div>
-          <Studio look={look} tool={tool} color={color} dye={dye} decorating={tab === 'Dress up'} clip={clip} dispatch={dispatch} onStyle={playSound} canUndo={state.history.length > 0} />
+          <Studio look={look} tool={tool} color={color} dye={dye} decorating={tab === 'Dress up'} clip={clip} dispatch={dispatch} onStyle={playSound} canUndo={state.history.length > 0} graphics={graphics.quality} fps={graphics.fps} active={visible && modal === null} />
         </div>
         <Toolbox tab={tab} onTab={setTab} tool={tool} onTool={setTool} color={color} onColor={setColor} dye={dye} onDye={setDye} look={look} name={friend.name} clip={clip} onClip={setClip} onWear={() => playSound('pop')} dispatch={dispatch} onPhoto={() => setModal('booth')} />
       </div>
     </main>
     {notice && <div className="toast" role="status"><Icon name="check" size={18} />{notice}</div>}
-    {modal && <Modal title={MODAL_TITLES[modal]} onClose={() => setModal(null)}>
+    {modal && <Modal title={MODAL_TITLES[modal]} onClose={() => setModal(null)}><Suspense fallback={<p className="gallery-note" role="status">Opening your salon...</p>}>
       {modal === 'gallery' ? <Gallery photos={photos} onRemove={(id) => setPhotos((previous) => previous.filter((photo) => photo.id !== id))} onClose={() => setModal(null)} />
         : modal === 'booth' ? <PhotoBooth look={look} name={friend.name} scene={scene} onScene={setScene} onSound={playSound} onSnap={takePhoto} />
+        : modal === 'settings' ? <Settings graphics={graphics} pwa={pwa} />
         : <div className="help-content">
           <div className="help-step"><span>1</span><div><h3>Meet your new bestie.</h3><p>Choose Mochi, Biscuit, or Cocoa. Each friend keeps their own look.</p></div></div>
           <div className="help-step"><span>2</span><div><h3>A little snip. A little magic.</h3><p>Pick a tool, then use a finger, mouse, or pen. Keep dragging with Brush: hair stays where you leave it. Trace a line with the gel Comb and the hair lies along it. Drag Snip to cut that spot, all the way down to a bald patch if you like, or hold Grow to make an area longer or bring bare scalp back. Keep holding Grow and the hair grows all the way down to the floor! Hold Curl on the hair: the longer you hold, the curlier it gets. “Do all the hair” styles it all at once.</p></div></div>
@@ -135,6 +148,6 @@ export default function App() {
           <div className="parent-note"><h3>A note for grown-ups</h3><p>No ads, accounts, purchases, or tracking. Looks stay on this device and browser, not in the cloud. Clearing browser data clears the gallery. Download favorites first. Sound is optional.</p><p>Keyboard: Tab to controls, Enter or Space to use them. On the capybara, Enter styles all hair. Arrow keys switch tool tabs. Escape closes this window.</p></div>
           <button className="primary-button" onClick={() => setModal(null)}>Let's play <Icon name="arrow" size={19} /></button>
         </div>}
-    </Modal>}
-  </>
+    </Suspense></Modal>}
+  </div>
 }

@@ -1,36 +1,38 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { HairMotion } from '../game/hairMotion'
 import type { HairOffsets } from '../game/hair'
+import { FrameLoop } from '../game/performance'
 
-export function useHairMotion(onFrame?: (now: number) => boolean) {
+export function useHairMotion(onFrame?: (now: number) => boolean, active = true, fps = 60) {
   // Built once: a HairMotion makes hundreds of spring tables, and this hook renders every animation frame.
   const [motion] = useState(() => ({ current: new HairMotion() }))
   const [offsets, setOffsets] = useState<HairOffsets>([])
-  const frame = useRef<number | null>(null)
   const reduced = useRef(false)
   const editFrame = useRef(onFrame)
   useEffect(() => { editFrame.current = onFrame }, [onFrame])
   const publish = useCallback(() => setOffsets(motion.current.offsets()), [])
 
-  const animate = useCallback(() => {
-    if (frame.current !== null) return
-    let previous = performance.now()
-    function tick(now: number) {
-      const editing = editFrame.current?.(now) ?? false
-      const moving = motion.current.step((now - previous) / 1000, reduced.current)
-      previous = now
-      setOffsets(motion.current.offsets())
-      frame.current = moving || editing ? requestAnimationFrame(tick) : null
-    }
-    frame.current = requestAnimationFrame(tick)
-  }, [])
+  const [loop] = useState(() => new FrameLoop({
+    now: () => performance.now(),
+    request: (callback) => requestAnimationFrame(callback),
+    cancel: (id) => cancelAnimationFrame(id),
+  }, (now, seconds) => {
+    if (document.hidden) return false
+    const editing = editFrame.current?.(now) ?? false
+    const moving = motion.current.step(seconds, reduced.current)
+    setOffsets(motion.current.offsets())
+    return moving || editing
+  }))
+
+  const animate = useCallback(() => { if (!document.hidden) loop.start() }, [loop])
 
   const reset = useCallback(() => {
-    if (frame.current !== null) cancelAnimationFrame(frame.current)
-    frame.current = null
+    loop.stop()
     motion.current = new HairMotion()
     setOffsets([])
-  }, [])
+  }, [loop])
+
+  useEffect(() => { loop.configure(active, fps) }, [active, fps, loop])
 
   useEffect(() => {
     const preference = matchMedia('(prefers-reduced-motion: reduce)')
@@ -39,10 +41,9 @@ export function useHairMotion(onFrame?: (now: number) => boolean) {
     preference.addEventListener('change', update)
     return () => {
       preference.removeEventListener('change', update)
-      if (frame.current !== null) cancelAnimationFrame(frame.current)
-      frame.current = null
+      loop.stop()
     }
-  }, [])
+  }, [loop])
 
   return { motion, offsets, animate, reset, publish }
 }

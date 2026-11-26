@@ -27,6 +27,29 @@ import type { Reaction } from '../game/reactions'
 
 afterEach(() => vi.unstubAllGlobals())
 describe('application initialization and artwork', () => {
+  it('reduces actual painted hair paths and effects, not editable strands or saved style, at lower graphics levels', () => {
+    const look = createLook('mochi')
+    look.hair = look.hair.map((strand) => ({ ...strand, curl: 1, soapy: true, glitter: true, wetness: 1, rainbow: true }))
+    const original = JSON.stringify(look)
+    const art = (graphics: 'low' | 'medium' | 'high') => renderToStaticMarkup(<Capybara look={look} graphics={graphics} />)
+    const low = art('low')
+    const medium = art('medium')
+    const high = art('high')
+    const count = (html: string, marker: string) => html.split(marker).length - 1
+    for (const html of [low, medium, high]) {
+      expect(count(html, 'data-strand=')).toBe(65)
+      expect(count(html, 'data-soap-strand=')).toBe(65)
+      expect(count(html, 'data-glitter-dust=')).toBe(65)
+      expect(count(html, 'data-wetness="1"')).toBe(65)
+    }
+    expect(count(low, '<path')).toBeLessThan(count(high, '<path') * 0.5)
+    expect(count(medium, '<path')).toBeLessThan(count(high, '<path'))
+    expect(count(low, 'data-glitter=')).toBe(0)
+    expect(count(medium, 'data-glitter=')).toBe(65)
+    expect(count(high, 'data-glitter=')).toBe(130)
+    expect(count(low, 'data-water-drop=')).toBe(0)
+    expect(JSON.stringify(look)).toBe(original)
+  })
   it('renders a playable salon immediately without a network asset dependency', () => {
     vi.stubGlobal('localStorage', { getItem: () => null, setItem: () => {} })
     const html = renderToStaticMarkup(<App />)
